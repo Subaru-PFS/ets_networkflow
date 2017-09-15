@@ -28,6 +28,9 @@ class NetworkElement(object):
 class SurveyPlan(Network):
     def __init__(self):
         super(SurveyPlan, self).__init__()
+        # These are just handy for quick access to a certain type of 
+        # node or arc.
+        # nodes
         self.cobras = OrderedDict()
         self.cobraVisits = OrderedDict()
         self.targets = {}
@@ -37,6 +40,16 @@ class SurveyPlan(Network):
         self.calTargetClasses = OrderedDict()
         self.sciTargetClasses = OrderedDict()
         self.sinks = OrderedDict()
+        # arcs
+        self.targetClassToTargetArcs = OrderedDict()
+        self.targetToTargetVisitArcs = OrderedDict()
+        self.targetVisitToCobraVisitArcs = OrderedDict()
+        self.cobraVisitToCobraArcs = OrderedDict()
+        self.cobraToSinkArcs = OrderedDict()
+        self.cobraVisitToCobraArcs = OrderedDict()
+        self.overflowArcs = OrderedDict()
+        
+
 
     def add_node(self, node):
         super(SurveyPlan, self).add_node(node)
@@ -64,16 +77,37 @@ class SurveyPlan(Network):
             self.sinks[node.id] = node
         else:
             raise Exception("Unknown node type.")
+            
 
     def get_overflowarcs(self):
         return  filter(lambda a: a == OverflowArc, self.arcs)
+    
+    
+    def add_arc(self, arc):
+        super(SurveyPlan, self).add_arc(arc)
+        if type(arc) == TargetClassToTargetArc:
+            self.targetClassToTargetArcs[arc.id] = arc
+        elif type(arc) == TargetToTargetVisitArc:
+            self.targetToTargetVisitArcs[arc.id] = arc
+        elif type(arc) == TargetVisitToCobraVisitArc:
+            self.targetVisitToCobraVisitArcs[arc.id] = arc
+        elif type(arc) == CobraVisitToCobraArc:
+            self.cobraVisitToCobraArcs[arc.id] = arc
+        elif type(arc) == CobraToSinkArc:
+            self.cobraToSinkArcs[arc.id] = arc
+        elif type(arc) == CobraVisitToCobraArc:
+            self.cobraVisitToCobraArcs[arc.id] = arc
+        elif type(arc) == OverflowArc:
+            self.overflowArcs[arc.id] = arc
+        else:
+            raise Exception("Unknown arc type: {}".format(type(arc)))
 
 
 # Arc types ...
 class Arc(NetworkElement):
     def __init__(self, startnode, endnode):
         super(Arc, self).__init__()
-        self.id = "{}->{}".format(startnode.id, endnode.id)
+        self.id = "{}={}".format(startnode.id, endnode.id)
         self.startnode = startnode
         self.endnode = endnode
         self.capacity = 1

@@ -125,14 +125,18 @@ def buildLPProblem(g, name="MinCostFlowTest", RSEP=5.):
         
     if INCLUDE_CALIB:
         prob += cost ==  \
-            pulp.lpSum([tc.cost * flows['{}=SINK'.format(tcid)] for tcid,tc in g.sciTargetClasses.iteritems() ])\
+         pulp.lpSum([tc.cost * flows['{}=SINK'.format(tcid)] for tcid,tc in g.sciTargetClasses.iteritems() ])\
          +  pulp.lpSum([tc.cost_partial_compl * flows['{}=SINK'.format(tid)] for tid in g.sciTargets ])\
-         +  pulp.lpSum([tc.cost               * flows['{}=SINK'.format(tcid)] for tcid,tc in g.calTargetClasses.iteritems() ])
+         +  pulp.lpSum([tc.cost               * flows['{}=SINK'.format(tcid)] for tcid,tc in g.calTargetClasses.iteritems() ])\
+         +  pulp.lpSum([ a.cost * flows[a.id]  for a in g.targetToTargetVisitArcs.itervalues() ]) # add these to implement higher coost for later visits
     else:
         prob += cost ==  \
-            sum([tc.cost *               flows['{}=SINK'.format(tcid)] for tcid,tc in g.sciTargetClasses.iteritems() ])\
-         +  sum([tc.cost_partial_compl * flows['{}=SINK'.format(tid)] for tid in g.sciTargets ])
+          pulp.lpSum([tc.cost *               flows['{}=SINK'.format(tcid)] for tcid,tc in g.sciTargetClasses.iteritems() ])\
+          + pulp.lpSum([tc.cost_partial_compl * flows['{}=SINK'.format(tid)] for tid in g.sciTargets ])\
+          + pulp.lpSum([ a.cost * flows[a.id]  for a in g.targetToTargetVisitArcs.itervalues() ]) # add these to implement higher coost for later visits
+      
 
+    # This sets the cost as objective function for the optimisation.
     prob += cost
     time_to_finish = time.time() - start_time
     print(" Time to completion: {:.2f} s".format(time_to_finish))
@@ -165,7 +169,7 @@ def computeStats(g, flows, cost):
     Noverflow = 0
     for tcid,tc in g.sciTargetClasses.iteritems():
         Noverflow += \
-            value(flows['{}={}'.format(g.arcs["{}->SINK".format(tcid)].startnode.id,g.arcs["{}->SINK".format(tcid)].endnode.id)])
+            value(flows['{}={}'.format(g.arcs["{}=SINK".format(tcid)].startnode.id,g.arcs["{}=SINK".format(tcid)].endnode.id)])
 
     Ncobras_used = 0
     Ncobras_fully_used = 0

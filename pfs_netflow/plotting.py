@@ -5,6 +5,8 @@ from matplotlib import patches as mpatches
 from matplotlib import collections 
 import numpy as np
 
+import datamodel as dm
+
 def plotSurveyPlan(g, name=""):
     
     def nlabel(ax, xy, text):
@@ -83,7 +85,7 @@ from matplotlib import patches as mpatches
 from matplotlib import collections 
 import numpy as np
 
-def plotFocalPlane(g, visit, summary, XC=0., YC=0., W=400., name=""):
+def plotFocalPlane(g, visit, summary="", XC=0., YC=0., W=400., name=""):
     
     def nlabel(ax, xy, text):
         y = xy[1] - 0.  # shift y-value for label so that it's below the artist
@@ -111,12 +113,12 @@ def plotFocalPlane(g, visit, summary, XC=0., YC=0., W=400., name=""):
             else:
                 alpha = .2
                         
-            if type(n2) == CobraVisit and n2.visit == visit and type(n1) == TargetVisit:
+            if type(n2) == dm.CobraVisit and n2.visit == visit and type(n1) == dm.TargetVisit:
                     x, y = np.array([[n1.target.x,n2.cobra.x], [n1.target.y,n2.cobra.y]])
 
                     line = mlines.Line2D(x , y, lw=1, alpha=alpha, zorder=10)
                     ax.add_line(line)
-            if type(n2) == CobraVisit and n2.visit == visit and type(n1) == CalTarget:
+            if type(n2) == dm.CobraVisit and n2.visit == visit and type(n1) == dm.CalTarget:
                     x, y = np.array([[n1.x,n2.cobra.x], [n1.y,n2.cobra.y]])
                     
                     line = mlines.Line2D(x , y, lw=1, alpha=alpha, zorder=10)
@@ -132,12 +134,12 @@ def plotFocalPlane(g, visit, summary, XC=0., YC=0., W=400., name=""):
     allnodes = [] # keep track of nodes actually contained in the plot
     plotNodes(ax, nodes=g.cobras, label="cobras", color="#19967d", allnodes=allnodes)
     plotNodes(ax, nodes=g.sciTargets, label="science\ntargets", color="#ff8f80", allnodes=allnodes)
-    plotNodes(ax, nodes=g.calTargets, label="calib\ntargets",color="#ffeca9", allnodes=allnodes)
+    #plotNodes(ax, nodes=g.calTargets, label="calib\ntargets",color="#ffeca9", allnodes=allnodes)
     plotArcs(ax, g, allnodes, visit)
 
     ax.set_ylim([YC-W/2.,YC+W/2.])
     ax.set_xlim([XC-W/2.,XC+W/2.])
-    plt.axis('off')
+    #plt.axis('off')
     plt.text(-0.1,-0.1, summary, ha='left', va='bottom', transform=ax.transAxes, fontsize=8)
     plt.text(0.5,1.0, "visit {}/{}".format(visit+1,len(g.visits)), ha='center', va='top', transform=ax.transAxes)
     plt.savefig("{}_visit{}_fp.pdf".format(name,visit))

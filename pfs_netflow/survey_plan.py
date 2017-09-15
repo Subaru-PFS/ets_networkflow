@@ -1,4 +1,4 @@
-from numpy import unique
+from numpy import unique, sqrt, abs
 from numpy import inf
 
 import datamodel as dm
@@ -9,9 +9,23 @@ def setflows(g,flows):
         if flows.has_key(k):
             a.flow = value(flows[k])
 
-def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, tclasses, \
+
+def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, class_dict, \
                     cost_dict, supply_dict, NVISITS, RMAX, CENTER, COBRAS = []):
     print("buildSurveyPlan " )
+    
+    if not 'visits' in cost_dict:
+        # no specific cost for the visits is give, make them all zero cost
+        cost_dict['visits'] = [0.] * NVISITS
+    else:
+        assert len(cost_dict['visits']) >= NVISITS, \
+        "The length of the array in (cost_dict['visits']) (= {}) is less than NVISITS (= {})."\
+            .format(len(cost_dict['visits']),NVISITS) 
+    
+    if not 'cobra_move' in cost_dict:
+        # no specific cost function for the cobra move distance is given. Set to zero cost.
+        costOfD = lambda x : 0.
+    costOfD = cost_dict['cobra_move']
     
     TARGETS = []
 
@@ -39,10 +53,11 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, tclasses, \
             cvid = "C_{}_v{}".format(cid,visit)
             cv = dm.CobraVisit(id=cvid,cobra=c,visit=visit)
             g.add_node(cv)
-            g.add_arc(dm.CobraVisitToCobraArc(cv, c))
+            cvca = dm.CobraVisitToCobraArc(cv, c)
+            g.add_arc(cvca)
     
     # Add nodes for target classes
-    for tc in unique(tclasses):
+    for tc in unique( class_dict.values() ):
         # add target-class super node
         if tc.startswith("sci_"):
             targetClass = dm.SciTargetClass("TClass_{}".format(tc))
@@ -62,6 +77,8 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, tclasses, \
                 targetClass.cost = cost_dict[tc]
                 targetClass.supply = supply_dict[tc]
                 g.add_node(targetClass)
+        else:
+            print("Error unknown target class {}".format(tc))
                 
         
         # Add costly overflow arc to the target class
@@ -70,7 +87,8 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, tclasses, \
     
     # Add nodes for the targets and the target visists
     #  and arcs between them
-    for tid,tc,nrv in zip(targets, tclasses, nreqvisits):
+    for tid,nrv in zip(targets, nreqvisits):
+        tc = class_dict[tid]
         x,y = targets[tid]
         if (x-CENTER[0])**2 + (y-CENTER[1])**2 > RMAX**2:
             continue
@@ -86,14 +104,19 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, tclasses, \
                 tvid = "T_{}_v{}".format(tid,visit)
                 tv = dm.TargetVisit(id=tvid,target=t,visit=visit)
                 g.add_node( tv )
-                e = g.add_arc(dm.TargetToTargetVisitArc(t, tv))
+                ttva = dm.TargetToTargetVisitArc(t, tv)
+                # Here we assign the cost for the respective visit
+                # increasing the cost for later visits encourages
+                # earlier observation.
+                ttva.cost = cost_dict["visits"][visit]
+                e = g.add_arc(ttva)
 
             # Add arc from target class to target
             targetClass = g.sciTargetClasses["TClass_{}".format(tc)]
             targetClass.add_target(t)
             g.add_arc( dm.TargetClassToTargetArc(targetClass, t) )
             
-            # Add VERY costly overflow arc from targets to sind
+            # Add VERY costly overflow arc from targets to sink
             g.add_arc( dm.OverflowArc(targetClass.cost_partial_compl, t, T) )
 
         
@@ -132,7 +155,8 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, tclasses, \
         
     # Add arcs corresponding to the visibilies, i.e. 
     # to which cobra can observe which target in which exposure
-    for id,tc in zip(visibilities, tclasses):
+    for id in visibilities:
+        tc = class_dict[id]
         # these are all the cobras that can reach the target 
         cobra_ids = ["C_{}".format(c) for c in visibilities[id]]
         
@@ -149,18 +173,26 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, tclasses, \
             # So for each visit, link all cobras that can reach
             # a specific target to that target.
             for visit in g.visits:
-                
+                #print "x:", visit, cobra_ids
                 tvid = "{}_v{}".format(tid,visit)
                 tv = g.targetVisits[tvid]
                 for cid in cobra_ids:
-
+                    #print "cid:", cid, g.cobras.has_key(cid)
                     # bail out if we didn't include use this cobra
                     if not g.cobras.has_key(cid):
                         continue
                     cvid = "{}_v{}".format(cid,visit)
                     cv = g.cobraVisits[cvid]
                     a = dm.TargetVisitToCobraVisitArc(tv,cv)
+                    
+                    cx,cy = g.cobras[cid].x, g.cobras[cid].y
+                    tx,ty = g.sciTargets[tid].x, g.sciTargets[tid].y
+               
+                    d = abs( sqrt( (tx-cx)**2. + (ty-cy)**2. ) )
+                    a.cost = costOfD(d)
+                    
                     e = g.add_arc(a)
+
 
         
         if tc.startswith("cal_") or tc.startswith("sky_"):
