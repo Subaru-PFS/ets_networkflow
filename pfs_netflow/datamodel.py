@@ -128,6 +128,7 @@ class TargetToTargetVisitArc(Arc):
 class TargetVisitToCobraVisitArc(Arc):
     def __init__(self, startnode, endnode):
         super(TargetVisitToCobraVisitArc, self).__init__(startnode, endnode)
+        self.d = None # Distance from target to cobra in mm.
 
 
 class CobraVisitToCobraArc(Arc):

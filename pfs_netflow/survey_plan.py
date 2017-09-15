@@ -190,7 +190,7 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, class_dict, \
                
                     d = abs( sqrt( (tx-cx)**2. + (ty-cy)**2. ) )
                     a.cost = costOfD(d)
-                    
+                    a.d = d
                     e = g.add_arc(a)
 
 
@@ -216,6 +216,14 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, class_dict, \
                     
                     cv = g.cobraVisits[cvid]
                     a = dm.TargetVisitToCobraVisitArc(t,cv)
+                    
+                    cx,cy = g.cobras[cid].x, g.cobras[cid].y
+                    tx,ty = g.calTargets[tid].x, g.calTargets[tid].y
+                    
+                    d = abs( sqrt( (tx-cx)**2. + (ty-cy)**2. ) )
+                    a.cost = costOfD(d)
+                    a.d = d
+                    
                     e = g.add_arc(a)
                 
     return g
