@@ -7,7 +7,7 @@ import numpy as np
 
 import datamodel as dm
 
-def plotSurveyPlan(g, name=""):
+def plotSurveyPlan(g, name="", PLOTSCI=True, PLOTCAL=True, LABELFLOWS=False, ALTLABELS=None):
     
     def nlabel(ax, xy, text):
         y = xy[1] - 0.  # shift y-value for label so that it's below the artist
@@ -31,20 +31,33 @@ def plotSurveyPlan(g, name=""):
         allnodes += nodes.keys()
         plt.text(x,0.,label, ha = 'center', va='top')
      
-    def plotArcs(ax, g, allnodes):
+    def plotArcs(ax, g, allnodes, LABELFLOWS, ALTLABELS):
         for a in g.arcs.itervalues():
             n1,n2 = a.startnode,a.endnode
             if n1.id in allnodes and n2.id in allnodes:
                 # add a line
                 x, y = np.array([[n1.px,n2.px], [n1.py,n2.py]])
+
                 lw = a.flow * 2 + 1.
-                line = mlines.Line2D(x , y , lw=lw, alpha=.3,zorder=0)
+                c='k'
+                rflw = a.flow
+                if rflw < 1e-6:
+                    rflw = 0.
+                if rflw > 0.:
+                    c='blue'
+                line = mlines.Line2D(x , y , lw=lw, alpha=.3,zorder=0, c=c)
+                if LABELFLOWS:
+                    l = a.id
+                    if ALTLABELS != None:
+                        l = ALTLABELS[a.id]
+                    ax.text((n1.px+n2.px)/2.,(n1.py+n2.py)/2., "{}:{}".format(l,rflw), size=8)
+                    
                 ax.add_line(line)
 
     
     cmap=plt.cm.hsv
               
-    if True:
+    if PLOTSCI:
         fig = plt.figure(figsize=[15,15])
         # science targets
         ax = plt.subplot(111) # note we must use plt.subplots, not plt.subplot
@@ -54,22 +67,24 @@ def plotSurveyPlan(g, name=""):
         plotNodes(ax, nodes=g.targetVisits, x=0.5, label="target\nvisits", color="#ffbbb1", allnodes=allnodes)
         plotNodes(ax, nodes=g.sciTargets, x=0.3, label="science\ntargets", color="#ff8f80", allnodes=allnodes)
         plotNodes(ax, nodes=g.sciTargetClasses, x=0.1, label="science\ntarget\nclasses", color="#c92d39", allnodes=allnodes)
-        plotArcs(ax, g, allnodes)
+        plotArcs(ax, g, allnodes, LABELFLOWS, ALTLABELS)
         ax.set_ylim([-.0,1.0])
         ax.set_xlim([-.0,1.0])
         plt.axis('off')
         plt.savefig("{}_sci.pdf".format(name))
             
-    if True:
+    if PLOTCAL:
         fig = plt.figure(figsize=[15,15])
         # calibration targets
         ax = plt.subplot(111) # note we must use plt.subplots, not plt.subplot
         allnodes = []
         plotNodes(ax, nodes=g.cobras, x=0.9, label="cobras", color="#19967d", allnodes=allnodes)
         plotNodes(ax, nodes=g.cobraVisits, x=0.7, label="cobras\nvisits",color="#99d5ca", allnodes=allnodes)
-        plotNodes(ax, nodes=g.calTargets, x=0.4, label="calib\ntargets",color="#ffeca9", allnodes=allnodes)
-        plotNodes(ax, nodes=g.calTargetClasses, x=0.2, label="calib.\ntarget\nclasses",color="#ef8d22", allnodes=allnodes)
-        plotArcs(ax, g, allnodes)
+        if len(g.calTargets) > 0:
+            plotNodes(ax, nodes=g.calTargets, x=0.4, label="calib\ntargets",color="#ffeca9", allnodes=allnodes)
+        if len(g.calTargetClasses) > 0:
+            plotNodes(ax, nodes=g.calTargetClasses, x=0.2, label="calib.\ntarget\nclasses",color="#ef8d22", allnodes=allnodes)
+        plotArcs(ax, g, allnodes, LABELFLOWS, ALTLABELS)
         ax.set_ylim([-.0,1.0])
         ax.set_xlim([-.0,1.0])
         plt.axis('off')

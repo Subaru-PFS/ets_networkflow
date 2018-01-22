@@ -1,5 +1,5 @@
 import pulp
-from pulp import LpVariable, LpProblem, LpMinimize, GLPK, LpStatus, value, CPLEX, COIN, COIN_CMD
+from pulp import LpVariable, LpProblem, LpMinimize, GLPK, LpStatus, value, CPLEX, COIN, COIN_CMD, LOQO_CMD, GUROBI_CMD, GUROBI
 from numpy import random
 from collections import namedtuple
 from numpy import nan
@@ -7,23 +7,33 @@ import time
 
 import datamodel as dm
 
-def solve(prob, maxSeconds=5):
+def solve(prob, maxSeconds=5, solver='COIN_CMD'):
     #status = prob.solve()
     #status = prob.solve(GLPK(msg = 1, keepFiles=1))
     #status = prob.solve(COIN(msg = 1, keepFiles=1, maxSeconds=maxSeconds))
-    status = prob.solve(COIN_CMD(msg = 1, keepFiles=1, maxSeconds=maxSeconds, threads=6, dual=10.))
+    if solver == 'COIN_CMD':
+        status = prob.solve(COIN_CMD(msg = 1, keepFiles=1, maxSeconds=maxSeconds, threads=6, dual=10.))
+    
+    #status = prob.solve(LOQO_CMD(msg = 1, keepFiles=1, path='/Users/mxhf/ownCloudRZG/work/MPE/pfs/ETS/LOQO/loqo'))
     #status = prob.solve(CPLEX(msg = 1, keepFiles=1))
+    #status = prob.solve(GUROBI_CMD(msg = 1, keepFiles=1))
+    elif solver == 'GUROBI':
+        status = prob.solve(GUROBI(msg = 1))
+    else:
+        print("ERROR: Unkown solver {}.".format(solver) )
+        return None
+    
     return status
 
 
-def buildLPProblem(g, name="MinCostFlowTest", RSEP=5.):
+def buildLPProblem(g, name="MinCostFlowTest", RSEP=5., cat='Integer'):
     start_time = time.time()
 
     prob = LpProblem(name, LpMinimize)
     flows = {}
     
     def addFlow(flows, n, l, u=None):
-        f = LpVariable(n, l, u, cat='Integer')
+        f = LpVariable(n, l, u, cat=cat)
         #f = LpVariable(n, l, u, cat='continuous')
         flows[f.name] = f
 
@@ -112,7 +122,6 @@ def buildLPProblem(g, name="MinCostFlowTest", RSEP=5.):
                 pulp.lpSum([ flows['{}={}'.format(a.startnode.id,a.endnode.id)] for a in t.outarcs])
     ###
     
-    
 
 
     print("Building cost equation ...")
@@ -123,19 +132,10 @@ def buildLPProblem(g, name="MinCostFlowTest", RSEP=5.):
    
     cost = LpVariable("cost", 0) 
         
-    if INCLUDE_CALIB:
-        prob += cost ==  \
-         pulp.lpSum([tc.cost * flows['{}=SINK'.format(tcid)] for tcid,tc in g.sciTargetClasses.iteritems() ])\
-            +  pulp.lpSum([tc.cost_partial_compl * flows['{}=SINK'.format(tid)] for tid in g.sciTargets ])\
-            +  pulp.lpSum([tc.cost               * flows['{}=SINK'.format(tcid)] for tcid,tc in g.calTargetClasses.iteritems() ])\
-            +  pulp.lpSum([ a.cost * flows[a.id]  for a in g.targetToTargetVisitArcs.itervalues() ]) \
-            +  pulp.lpSum([ a.cost * flows[a.id] for a in g.targetVisitToCobraVisitArcs.itervalues() ])
-    else:
-        prob += cost ==  \
-          pulp.lpSum([tc.cost *               flows['{}=SINK'.format(tcid)] for tcid,tc in g.sciTargetClasses.iteritems() ])\
-          + pulp.lpSum([tc.cost_partial_compl * flows['{}=SINK'.format(tid)] for tid in g.sciTargets ])\
-          + pulp.lpSum([ a.cost * flows[a.id]  for a in g.targetToTargetVisitArcs.itervalues() ]) \
-          + pulp.lpSum([ a.cost * flows[a.id] for a in g.targetVisitToCobraVisitArcs.itervalues() ])
+
+    prob += cost ==  pulp.lpSum([ a.cost * flows[a.id] for a in g.overflowArcs.itervalues() ])\
+        +  pulp.lpSum([ a.cost * flows[a.id] for a in g.targetToTargetVisitArcs.itervalues() ]) \
+        +  pulp.lpSum([ a.cost * flows[a.id] for a in g.targetVisitToCobraVisitArcs.itervalues() ])
       
 
     # This sets the cost as objective function for the optimisation.
