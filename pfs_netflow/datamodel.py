@@ -1,3 +1,4 @@
+from builtins import object
 # # Datamodel for the flow network
 
 from collections import OrderedDict
@@ -80,7 +81,7 @@ class SurveyPlan(Network):
             
 
     def get_overflowarcs(self):
-        return  filter(lambda a: a == OverflowArc, self.arcs)
+        return  [a for a in self.arcs if a == OverflowArc]
     
     
     def add_arc(self, arc):

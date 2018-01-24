@@ -1,3 +1,8 @@
+from __future__ import division
+from __future__ import print_function
+from __future__ import absolute_import
+from builtins import range
+from past.utils import old_div
 import matplotlib.pyplot as plt
 
 import matplotlib.lines as mlines
@@ -5,7 +10,7 @@ from matplotlib import patches as mpatches
 from matplotlib import collections 
 import numpy as np
 
-import datamodel as dm
+from . import datamodel as dm
 
 def plotSurveyPlan(g, name="", PLOTSCI=True, PLOTCAL=True, LABELFLOWS=False, ALTLABELS=None):
     
@@ -17,9 +22,9 @@ def plotSurveyPlan(g, name="", PLOTSCI=True, PLOTCAL=True, LABELFLOWS=False, ALT
     def plotNodes(ax, nodes, x, color, label, allnodes):
         # targets
         N = len(nodes)
-        grid = [[x, 1. - (float(i)+1.)/float(N+1)] for i in range(N)]
+        grid = [[x, 1. - old_div((float(i)+1.),float(N+1))] for i in range(N)]
         patches = []
-        for i,(id,n) in enumerate(nodes.iteritems()):
+        for i,(id,n) in enumerate(nodes.items()):
             n.px,n.py = grid[i]
             circle = mpatches.Circle(grid[i],.01, facecolor=color, edgecolor='grey', lw=1.)
             patches.append(circle)
@@ -28,11 +33,11 @@ def plotSurveyPlan(g, name="", PLOTSCI=True, PLOTCAL=True, LABELFLOWS=False, ALT
         collection = collections.PatchCollection(patches, match_original=True)
         
         ax.add_collection(collection)
-        allnodes += nodes.keys()
+        allnodes += list(nodes.keys())
         plt.text(x,0.,label, ha = 'center', va='top')
      
     def plotArcs(ax, g, allnodes, LABELFLOWS, ALTLABELS):
-        for a in g.arcs.itervalues():
+        for a in g.arcs.values():
             n1,n2 = a.startnode,a.endnode
             if n1.id in allnodes and n2.id in allnodes:
                 # add a line
@@ -50,7 +55,7 @@ def plotSurveyPlan(g, name="", PLOTSCI=True, PLOTCAL=True, LABELFLOWS=False, ALT
                     l = a.id
                     if ALTLABELS != None:
                         l = ALTLABELS[a.id]
-                    ax.text((n1.px+n2.px)/2.,(n1.py+n2.py)/2., "{}:{}".format(l,rflw), size=8)
+                    ax.text(old_div((n1.px+n2.px),2.),old_div((n1.py+n2.py),2.), "{}:{}".format(l,rflw), size=8)
                     
                 ax.add_line(line)
 
@@ -111,17 +116,17 @@ def plotFocalPlane(g, visit, summary="", XC=0., YC=0., W=400., name=""):
         # targets
         N = len(nodes)
         patches = []
-        for i,(id,n) in enumerate(nodes.iteritems()):
+        for i,(id,n) in enumerate(nodes.items()):
             n.px,n.py = n.x,n.y
             circle = mpatches.Circle((n.x,n.y),.75, facecolor=color, edgecolor='grey', lw=1.)
             patches.append(circle)
             
         collection = collections.PatchCollection(patches, match_original=True)
         ax.add_collection(collection)
-        allnodes += nodes.keys()
+        allnodes += list(nodes.keys())
      
     def plotArcs(ax, g, allnodes, visit):
-        for a in g.arcs.itervalues():
+        for a in g.arcs.values():
             n1,n2 = a.startnode,a.endnode
             if a.flow > 0.:
                 alpha = 1.
@@ -152,8 +157,8 @@ def plotFocalPlane(g, visit, summary="", XC=0., YC=0., W=400., name=""):
     #plotNodes(ax, nodes=g.calTargets, label="calib\ntargets",color="#ffeca9", allnodes=allnodes)
     plotArcs(ax, g, allnodes, visit)
 
-    ax.set_ylim([YC-W/2.,YC+W/2.])
-    ax.set_xlim([XC-W/2.,XC+W/2.])
+    ax.set_ylim([YC-old_div(W,2.),YC+old_div(W,2.)])
+    ax.set_xlim([XC-old_div(W,2.),XC+old_div(W,2.)])
     #plt.axis('off')
     plt.text(-0.1,-0.1, summary, ha='left', va='bottom', transform=ax.transAxes, fontsize=8)
     plt.text(0.5,1.0, "visit {}/{}".format(visit+1,len(g.visits)), ha='center', va='top', transform=ax.transAxes)
@@ -192,13 +197,13 @@ def printCalSurveyPlan(g):
     print("Visits: {}".format(g.visits))
     for tid in g.calTargetClasses:
         print("CalTargetClass {}".format(tid))
-    allnodes += g.calTargetClasses.keys()
+    allnodes += list(g.calTargetClasses.keys())
     
     for tid in g.calTargets:
         print("CalTarget {}".format(tid))
-    allnodes += g.calTargets.keys()
+    allnodes += list(g.calTargets.keys())
     
-    for aid,a in g.arcs.iteritems():
+    for aid,a in g.arcs.items():
         n1,n2 = a.startnode,a.endnode
         if n1.id in allnodes and n2.id in allnodes:
                 
@@ -211,17 +216,17 @@ def printSciSurveyPlan(g):
     print("Visits: {}".format(g.visits))
     for tid in g.sciTargetClasses:
         print("SciTargetClass {}".format(tid))
-    allnodes += g.sciTargetClasses.keys()
+    allnodes += list(g.sciTargetClasses.keys())
     
     for tid in g.sciTargets:
         print("SciTarget {}".format(tid))
-    allnodes += g.sciTargets.keys()
+    allnodes += list(g.sciTargets.keys())
     
     for tvid in g.targetVisits:
         print("TargetVisit {}".format(tvid))
-    allnodes += g.targetVisits.keys()
+    allnodes += list(g.targetVisits.keys())
     
-    for aid,a in g.arcs.iteritems():
+    for aid,a in g.arcs.items():
         n1,n2 = a.startnode,a.endnode
         if n1.id in allnodes and n2.id in allnodes:
                 
@@ -237,9 +242,9 @@ from matplotlib import pyplot as plt
 def plot_targets_in_fplane(targets, class_dict, RMAX = 15., CENTER = [-5.,90.] , xlim=[-200.,200.],ylim=[-200.,200.]):
     f = plt.figure(figsize=[5,5])
 
-    sci = filter(lambda t : class_dict[t].startswith("sci"), targets )
-    cal = filter(lambda t : class_dict[t].startswith("cal"), targets )
-    sky = filter(lambda t : class_dict[t].startswith("sky"), targets )
+    sci = [t for t in targets if class_dict[t].startswith("sci")]
+    cal = [t for t in targets if class_dict[t].startswith("cal")]
+    sky = [t for t in targets if class_dict[t].startswith("sky")]
 
     x = array( [targets[t][0] for t in sci])
     y = array( [targets[t][1] for t in sci])

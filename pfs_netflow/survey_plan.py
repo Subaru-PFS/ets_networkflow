@@ -1,12 +1,16 @@
+from __future__ import print_function
+from __future__ import absolute_import
+from builtins import zip
+from builtins import range
 from numpy import unique, sqrt, abs
 from numpy import inf
 
-import datamodel as dm
+from . import datamodel as dm
 
 def setflows(g,flows):
-    for a in g.arcs.itervalues():
+    for a in g.arcs.values():
         k = '{}={}'.format(a.startnode.id,a.endnode.id)
-        if flows.has_key(k):
+        if k in flows:
             a.flow = value(flows[k])
 
 
@@ -47,7 +51,7 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, class_dict, \
     TARGETS = []
     # generate a directed graph 
     g = dm.SurveyPlan()
-    g.visits = range(NVISITS)
+    g.visits = list(range(NVISITS))
     
     # Add global sink node
     T = dm.Sink("SINK")
@@ -72,7 +76,7 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, class_dict, \
             g.add_arc(cvca)
     
     # Add nodes for target classes
-    for tc in unique( class_dict.values() ):
+    for tc in unique( list(class_dict.values()) ):
         # add target-class super node
         if tc.startswith("sci_"):
             targetClass = dm.SciTargetClass("TClass_{}".format(tc))
@@ -153,11 +157,11 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, class_dict, \
     # Calibration targets only need to be observed once.
     # Remember we replicate calibration targets such that there is one per 
     # observation.
-    for tid,t in g.calTargets.iteritems():
+    for tid,t in g.calTargets.items():
          t.gain = 1.
 
     # Set supply for each science target class. 
-    for tcid,targetClass in g.sciTargetClasses.iteritems():
+    for tcid,targetClass in g.sciTargetClasses.items():
         if targetClass.supply == inf:
             # Rather than using infinite supply (which woudl result in infinite cost)
             # set supply for the targetClasses to number of targets. 
@@ -165,7 +169,7 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, class_dict, \
             targetClass.supply = len(targetClass.targets)
         
     # Set supply for each calibration target class. 
-    for tcid,targetClass in g.calTargetClasses.iteritems():
+    for tcid,targetClass in g.calTargetClasses.items():
         if targetClass.supply == inf:
             targetClass.supply = len(targetClass.targets)
         
@@ -185,7 +189,7 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, class_dict, \
             if tc.startswith("sci_"):
                 tid="T_{}".format(id)
                 # bail out if we didn't include use this target
-                if not g.sciTargets.has_key(tid):
+                if tid not in g.sciTargets:
                     continue
                 # For science targets we need to add edges between cobra visits and target visits.
                 # So for each visit, link all cobras that can reach
@@ -197,7 +201,7 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, class_dict, \
                 for cid in cobra_ids:
                     #print "cid:", cid, g.cobras.has_key(cid)
                     # bail out if we didn't include use this cobra
-                    if not g.cobras.has_key(cid):
+                    if cid not in g.cobras:
                         continue
                         
                     cvid = "{}_v{}".format(cid,visit)
@@ -221,14 +225,14 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, class_dict, \
                         tid = "T_{}_v{}".format(id,visit)
 
                         # bail out if we didn't include use this target
-                        if not g.calTargets.has_key(tid):
+                        if tid not in g.calTargets:
                             continue
 
                         t = g.calTargets[tid]
 
 
                         # bail out if we didn't include use this cobra
-                        if not g.cobras.has_key(cid):
+                        if cid not in g.cobras:
                             continue
                         cvid = "{}_v{}".format(cid,visit)
 
