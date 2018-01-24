@@ -2,9 +2,11 @@ from __future__ import division
 from __future__ import print_function
 from builtins import zip
 from builtins import range
-from past.utils import old_div
 from matplotlib import pyplot as plt
 import numpy as np
+import time
+import pulp
+from astropy.io import ascii
 
 def pp(s):
     print(s)
@@ -22,7 +24,6 @@ fcal_stars       = catalog_path+"/pfs_preliminary_target_cosmology_fcstars.dat"
 fsky_pos         = catalog_path+"/pfs_preliminary_target_cosmology_sky.dat"
 
 # Load target lists.
-from astropy.io import ascii
 
 science_targets = ascii.read(fscience_targets)
 
@@ -55,7 +56,7 @@ pointing_RA, pointing_DEC = 33.7025, -3.8455
 
 DRMAX_SQ = .75**2
 DRMAX_SQ = .02**2
-DRMAX_SQ = (old_div(2700.,3600.))**2.
+DRMAX_SQ = (2700./3600.)**2.
 #DRMAX_SQ = .5**2
 
 dra = (ra - pointing_RA)*np.cos(np.deg2rad(dec))
@@ -89,10 +90,10 @@ priorities = priorities.tolist()
 # compute number of required visists from exposure times
 # and block length
 nreqv_dict = {}
-for id,t,nrv in zip(ID, types, old_div(np.array(exp_times),BLOCKLENGTH)):
+for id,t,nrv in zip(ID, types, np.array(exp_times)/BLOCKLENGTH):
     nreqv_dict[id] = int(nrv)
     
-print(("Required revisits", np.unique( [v for v in nreqv_dict.values()] )))
+print("Required revisits", np.unique( [v for v in nreqv_dict.values()] ))
 
 # RANDOMISE NUMBER OF REQUIRED VISISTS
 RANDOMIZENREQ = True
@@ -106,7 +107,7 @@ if RANDOMIZENREQ:
     for id,t,nrv in zip(ID, types, nv):
         nreqv_dict[id] = int(nrv)
 
-    print(("Required revisits", np.unique( [v for v in nreqv_dict.values()] )))
+    print("Required revisits", np.unique( [v for v in nreqv_dict.values()] ))
 
 import pyETS
 import pycconv
@@ -259,7 +260,7 @@ Y = cdist( points[:N], points[:N] )
 
 # any target separation that is smaller than 2 x the collision radius will be flagged as collision
 cc = Y <= (fiber_collision_radius*2.) 
-ncoll = int( old_div((np.sum(cc.flatten()) - N),2.) )
+ncoll = int( (np.sum(cc.flatten()) - N)/2. )
 
 print ("Found  {:d} collision pairs.".format( ncoll  ))
 
@@ -347,9 +348,6 @@ def fil(xx,bb):
     for x,b in zip(xx,bb):
         if b: new.append(x)
     return new
-
-import numpy as np
-import time
     
 ALGORITHM = "new"
 ALGORITHM = "draining"
@@ -488,7 +486,7 @@ supply_dict['sky_P1'] = 1# 329
 # Build the survey plan graph.
 
 from pfs_netflow.survey_plan import buildSurveyPlan
-from pfs_netflow.plotting import plotSurveyPlan
+from pfs_netflow.plotting import plotSurveyPlan, plotFocalPlane
 
 NVISITS = 2
 COBRAS = []
@@ -598,15 +596,12 @@ print("Number of observable sky positions: {}".format(nsky_reachable) )
 
 # build the LP problem
 from pfs_netflow.lp import buildLPProblem, computeStats, solve
-from pulp import LpStatus, value
-import time
-
 
 def setflows(g,flows):
     for a in g.arcs.values():
         k = '{}={}'.format(a.startnode.id,a.endnode.id)
         if k in flows:
-            a.flow = value(flows[k])
+            a.flow = pulp.value(flows[k])
 
 
     
@@ -621,7 +616,7 @@ summary += pp("NVISITS = {}".format(NVISITS))
 summary += pp("Searching optimal strategy to observe in ")
 summary += pp(" {} visits".format(NVISITS))
 summary += pp(" {} science targets".format(NSciTargets))
-summary += pp(" {} calib. targets".format(old_div(NCalTargets,NVISITS)))
+summary += pp(" {} calib. targets".format(NCalTargets/NVISITS))
 summary += pp(" {} cobras".format(NCobras))
 summary += pp("Will stop in any case after {} s.".format(maxSeconds))
 
@@ -640,7 +635,6 @@ summary += pp("Time to build model: {:.4e} s".format(time_to_build))
 
 __ = prob.writeMPS("pfi_cosmo_{}_{}_visits_rand_nreq.mps".format(name,NVISITS), rename=1)
 
-import pulp
 
 def compute_collision_flow_pairs(collision_pairs):
     """
@@ -710,12 +704,12 @@ status = solve(prob) #, solver="GUROBI")
 
 
 time_to_solve = time.time() - start_time
-summary += pp("Solve status is [{}].".format( LpStatus[status] ))
+summary += pp("Solve status is [{}].".format( pulp.LpStatus[status] ))
 summary += pp("Time to solve: {:.4e} s".format(time_to_solve))
 
 stats = computeStats(g, flows, cost)
 
-summary += pp("{} = {}".format('Value of cost function',value(stats.cost) ) )
+summary += pp("{} = {}".format('Value of cost function',pulp.value(stats.cost) ) )
 summary += pp("[{}] out of {} science targets get observed.".format(int(stats.NSciObs),NSciTargets))
 summary += pp("For {} out of these all required exposures got allocated.".format(stats.NSciComplete))
 summary += pp("{} targets get sent down the overflow arc.".format(stats.Noverflow))
@@ -727,33 +721,27 @@ setflows(g,flows)
 # test if really no colliding targets were observed
 # This needs to be added to the survey plan and buildLPProblem methods.
 #
-import pulp
-from pulp import value
-
 
 flow_pairs = compute_collision_flow_pairs(collision_pairs)
  
 NCOLL = 0
 for fp in flow_pairs:
     
-    if value( flows[ fp[0] ] ) > 0. and value( flows[ fp[1] ] ) > 0.:
+    if pulp.value( flows[ fp[0] ] ) > 0. and pulp.value( flows[ fp[1] ] ) > 0.:
         #print("{} {} in collision".format(fp[0],fp[1]))
         NCOLL += 1
                              
 print("Detected {} collisions".format(NCOLL))
 
-value( flows[ fp[1] ] )
+pulp.value( flows[ fp[1] ] )
 
-from pfs_netflow.plotting import plotFocalPlane
 def setflows(g,flows):
     for a in g.arcs.values():
         k = '{}={}'.format(a.startnode.id,a.endnode.id)
         if k in flows:
-            a.flow = value(flows[k])
+            a.flow = pulp.value(flows[k])
             
 if True:
-    from pfs_netflow.plotting import plotFocalPlane
-
     plotFocalPlane(g, visit=1, W=25)
     plotSurveyPlan(g)
 
@@ -782,11 +770,6 @@ for cid,tid in assignments.items():
 
 
 # feed to collision code
-import numpy as np
-import time as time
-
-import sys
-sys.path.append("/Users/mxhf/work/MPE/pfs/src/ics_cobraOps/python")
 
 import ics.cobraOps.plotUtils as plotUtils
 import ics.cobraOps.targetUtils as targetUtils
@@ -799,10 +782,11 @@ from ics.cobraOps.RandomTargetSelector import RandomTargetSelector
 
 # Create the bench instanceroduct)
 #bench = Bench(layout="full", calibrationProduct=calibrationP
-cpos = [ [ complex(g.cobras[cid].x , g.cobras[cid].y) ] for cid in assignments]
+cpos = [ complex(g.cobras[cid].x , g.cobras[cid].y) for cid in assignments]
+print (np.array(cpos))
 bench = Bench(cobraCenters=np.array( cpos ))
 
-print(("Number of cobras:", bench.cobras.nCobras))
+print("Number of cobras:", bench.cobras.nCobras)
 
 
 # Calculate the total number of targets based on the bench properties
@@ -820,8 +804,10 @@ print(("Number of cobras:", bench.cobras.nCobras))
 
 
 # Generate the targets
+# MR FIXME: added the line below
+targetDensity = 1.
 targets = targetUtils.generateRandomTargets(targetDensity, bench)
-print(("Number of simulated targets:", targets.nTargets))
+print("Number of simulated targets:", targets.nTargets)
 
 # Select the targets
 selector = DistanceTargetSelector(bench, targets)
@@ -832,15 +818,15 @@ selectedTargets = selector.getSelectedTargets()
 start = time.time()
 simulator = CollisionSimulator(bench, selectedTargets)
 simulator.run()
-print(("Number of cobras involved in collisions:", simulator.nCollisions))
-print(("Number of cobras unaffected by end collisions: ", simulator.nCollisions - simulator.nEndPointCollisions))
-print(("Total simulation time (s):", time.time() - start))
+print("Number of cobras involved in collisions:", simulator.nCollisions)
+print("Number of cobras unaffected by end collisions: ", simulator.nCollisions - simulator.nEndPointCollisions)
+print("Total simulation time (s):", time.time() - start)
 
 
 # array of all distances for all possible target/cobra pairs
 dd =  np.array( [ a.d for a in g.targetVisitToCobraVisitArcs.values()] )
 # array of flows for all possible target/cobra pairs
-ff =  np.array( [ value(flows[a.id]) for a in g.targetVisitToCobraVisitArcs.values()] )
+ff =  np.array( [ pulp.value(flows[a.id]) for a in g.targetVisitToCobraVisitArcs.values()] )
 
 # caclulate mean cobra move distance
 ii = ff > 0.
@@ -855,7 +841,7 @@ print("max_movedist = {:.3f}mm".format(max_movedist) )
 print("std_movedist = {:.3f}mm".format(std_movedist) )
 
 
-cm = np.sum([ a.cost * value(flows[a.id]) for a in g.targetVisitToCobraVisitArcs.values() ])
+cm = np.sum([ a.cost * pulp.value(flows[a.id]) for a in g.targetVisitToCobraVisitArcs.values() ])
 
 print("cost from moves = {}".format(cm) )
 
@@ -912,19 +898,16 @@ with open("nwf_results_nvisits{}_early_obs2.txt".format(NVISITS), 'w') as f:
 
 g.targetToTargetVisitArcs
 
-value( flows['T_C000996->T_C000996_v0'.replace("->","=")] )
+#pulp.value( flows['T_C000996->T_C000996_v0'.replace("->","=")] )
 
 
-from pfs_netflow.plotting import plotFocalPlane
 def setflows(g,flows):
     for a in g.arcs.values():
         k = '{}={}'.format(a.startnode.id,a.endnode.id)
         if k in flows:
-            a.flow = value(flows[k])
+            a.flow = pulp.value(flows[k])
             
 if False:
-    from pfs_netflow.plotting import plotFocalPlane
-
     plotFocalPlane(g, visit=1, W=20)
     plotSurveyPlan(g)
 
@@ -939,8 +922,6 @@ sum( [class_dict[t][:3] == "cal" for t in targets] )
 print("{} targets positions in total.".format( nsci ))
 print("{} cal. targets in total.".format( ncal ))
 print("{} sky positions in total.".format( nsky ))
-
-from astropy.io import ascii
 
 nwf_results_nvisits = {}
 #nwf_results_nvisits[12] = ascii.read("nwf_results_nvisits12.txt")
@@ -986,8 +967,6 @@ plt.ylim([500,8200])
 if False:
     # test output for other solvers
     # build problem save to MPS
-    import time
-
 
     summary += pp("Building LP problem ...")
     start_time = time.time()
@@ -1040,7 +1019,7 @@ allflows = []
 for a in g.arcs.values():
     k = '{}={}'.format(a.startnode.id,a.endnode.id)
     if k in flows:
-        allflows.append(value(flows[k]))
+        allflows.append(pulp.value(flows[k]))
 
 print("All flows are: integer {}".format(all( unique(allflows)%1 == 0 )))
 
@@ -1049,7 +1028,7 @@ if True:
     for a in g.arcs.values():
         k = '{}={}'.format(a.startnode.id,a.endnode.id)
         if k in flows:
-            a.flow = value(flows[k])
+            a.flow = pulp.value(flows[k])
     plotSurveyPlan(g)
     #return
 
@@ -1092,7 +1071,7 @@ Y = cdist( points[:N], points[:N] )
 # any target separation that is smaller than 2 x the collision radius will be flagged a s collision
 cc = Y <= (fiber_collision_radius*2.) 
 
-ncoll = int( old_div((np.sum(cc.flatten()) - N),2.) )
+ncoll = int( (np.sum(cc.flatten()) - N)/2. )
 
 print ("Found  {:d} collision pairs.".format( ncoll  ))
 
