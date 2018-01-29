@@ -4,6 +4,43 @@ from builtins import object
 from collections import OrderedDict
 from numpy import inf
 
+
+class NetworkElement(object):
+    def __init__(self):
+        pass
+
+
+# Node types ...
+class Node(NetworkElement):
+    def __init__(self, id):
+        super(Node, self).__init__()
+        self.id = id
+        self.capacity = inf
+        self.gain = 1
+        self.inarcs = []
+        self.outarcs = []
+        self.supply = 0
+
+
+class Sink(Node):
+    def __init__(self, id):
+        super(Sink, self).__init__(id)
+
+
+class Cobra(Node):
+    def __init__(self, id, x, y):
+        super(Cobra, self).__init__(id)
+        self.x = x
+        self.y = y
+
+
+class CobraVisit(Node):
+    def __init__(self, id, cobra, visit):
+        super(CobraVisit, self).__init__(id)
+        self.visit = visit
+        self.cobra = cobra
+
+
 class Network(object):
     """
     Network flow master class.
@@ -21,15 +58,10 @@ class Network(object):
         self.nodes[arc.endnode.id].inarcs.append(arc)
 
 
-class NetworkElement(object):
-    def __init__(self):
-        pass
-
-
 class SurveyPlan(Network):
     def __init__(self):
         super(SurveyPlan, self).__init__()
-        # These are just handy for quick access to a certain type of 
+        # These are just handy for quick access to a certain type of
         # node or arc.
         # nodes
         self.cobras = OrderedDict()
@@ -49,8 +81,6 @@ class SurveyPlan(Network):
         self.cobraToSinkArcs = OrderedDict()
         self.cobraVisitToCobraArcs = OrderedDict()
         self.overflowArcs = OrderedDict()
-        
-
 
     def add_node(self, node):
         super(SurveyPlan, self).add_node(node)
@@ -70,20 +100,18 @@ class SurveyPlan(Network):
         elif type(node) == TargetClass:
             self.targetClasses[node.id] = node
         elif type(node) == CalTargetClass:
-            self.calTargetClasses[node.id] = node  
+            self.calTargetClasses[node.id] = node
         elif type(node) == SciTargetClass:
-            self.sciTargetClasses[node.id] = node            
+            self.sciTargetClasses[node.id] = node
 
         elif type(node) == Sink:
             self.sinks[node.id] = node
         else:
             raise Exception("Unknown node type.")
-            
 
     def get_overflowarcs(self):
-        return  [a for a in self.arcs if a == OverflowArc]
-    
-    
+        return [a for a in self.arcs if a == OverflowArc]
+
     def add_arc(self, arc):
         super(SurveyPlan, self).add_arc(arc)
         if type(arc) == TargetClassToTargetArc:
@@ -129,7 +157,7 @@ class TargetToTargetVisitArc(Arc):
 class TargetVisitToCobraVisitArc(Arc):
     def __init__(self, startnode, endnode):
         super(TargetVisitToCobraVisitArc, self).__init__(startnode, endnode)
-        self.d = None # Distance from target to cobra in mm.
+        self.d = None  # Distance from target to cobra in mm.
         self.visit = None
 
 
@@ -152,37 +180,6 @@ class OverflowArc(Arc):
         self.capacity = inf
 
 
-# Node types ...      
-class Node(NetworkElement):
-    def __init__(self, id):
-        super(Node, self).__init__()
-        self.id = id
-        self.capacity = inf
-        self.gain = 1
-        self.inarcs = []
-        self.outarcs = []
-        self.supply = 0
-
-
-class Sink(Node):
-    def __init__(self, id):
-        super(Sink, self).__init__(id)
-
-
-class Cobra(Node):
-    def __init__(self, id, x, y):
-        super(Cobra, self).__init__(id)
-        self.x = x
-        self.y = y
-
-
-class CobraVisit(Node):
-    def __init__(self, id, cobra, visit):
-        super(CobraVisit, self).__init__(id)
-        self.visit = visit
-        self.cobra = cobra
-
-
 class TargetClass(Node):
     def __init__(self, id):
         super(TargetClass, self).__init__(id)
@@ -193,7 +190,7 @@ class TargetClass(Node):
         # How many objects of this class need to be observed.
         # For science object we probably generally want as many as we can?
         # For calibration objects only a subset N out of M may be required.
-        self.num_required = inf 
+        self.num_required = inf
 
     def add_target(self, t):
         self.targets[t.id] = t
@@ -209,33 +206,33 @@ class SciTargetClass(TargetClass):
     def __init__(self, id):
         super(SciTargetClass, self).__init__(id)
         # Describes cost of partial completion.
-        # Typically this should be a higher cost 
+        # Typically this should be a higher cost
         # than not observing the target at all.
-        self.cost_partial_compl = None 
+        self.cost_partial_compl = None
 
 
 class Target(Node):
-    def __init__(self, id, x, y, gain = 3):
+    def __init__(self, id, x, y, gain=3):
         super(Target, self).__init__(id)
         self.x = x
         self.y = y
-        self.gain = gain # number of required exposures
+        self.gain = gain  # number of required exposures
         self.collision_group = None
         self.targetVisits = {}
 
 
 class SciTarget(Target):
-    def __init__(self, id, x, y, gain = 3):
+    def __init__(self, id, x, y, gain=3):
         super(SciTarget, self).__init__(id, x, y, gain)
 
 
 class CalTarget(Target):
     """
     Calibration targets are different in the sense that they can be reobserved
-    and arbitrary number of time while their required number of visits
+    an arbitrary number of times while their required number of visits
     is always one. A reobservation will therefore never be enforced.
     """
-    def __init__(self, id, x, y, visit, gain = 3):
+    def __init__(self, id, x, y, visit, gain=3):
         super(CalTarget, self).__init__(id, x, y, gain)
         self.visit = visit
 
@@ -244,6 +241,4 @@ class TargetVisit(Node):
     def __init__(self, id, target, visit):
         super(TargetVisit, self).__init__(id)
         self.visit = visit
-        self.target = target 
-
-
+        self.target = target

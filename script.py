@@ -180,7 +180,7 @@ if False:
     plt.axis('equal')
     plt.xlim([-20,20])
     plt.ylim([-20,20])
-
+    plt.show()
 # perform target assignment using the "draining" algorithm, and return the list
 # of assigned targets and which cobras were used to observe them.
 #res = pyETS.getObs(ets_target_pos,exp_times,priorities,ets_cobras,"draining_closest")
@@ -231,7 +231,7 @@ l = plt.legend()
 l.draw_frame(False)
 plt.xlabel("x [mm]")
 plt.ylabel("y [mm]")
-
+plt.show()
 # find collision pairs
 
 
@@ -291,7 +291,7 @@ l.draw_frame(False)
 plt.xlabel("x [mm]")
 plt.ylabel("y [mm]")
 plt.xlim([-15,15])
-
+plt.show()
 # Compute a few statistics:
 # Number of rachable targets by type and
 # number of cobras that can observe any target.
@@ -432,7 +432,7 @@ plt.xlabel('ra [Deg]')
 
 #plt.xlim([33.25,34.74])
 #plt.ylim([-5.25,-3.75])
-
+plt.show()
 # Define the cost function
 
 cost_dict = {}
@@ -912,21 +912,21 @@ if False:
     plotSurveyPlan(g)
 
 
-nsci = sum( [class_dict[t][:3] == "sci" for t in targets] )
-ncal = sum( [class_dict[t][:3] == "cal" for t in targets] )
-nsky = sum( [class_dict[t][:3] == "sky" for t in targets] )
+#nsci = sum( [class_dict[t][:3] == "sci" for t in targets] )
+#ncal = sum( [class_dict[t][:3] == "cal" for t in targets] )
+#nsky = sum( [class_dict[t][:3] == "sky" for t in targets] )
 
-sum( [class_dict[t][:3] == "cal" for t in targets] )
+#sum( [class_dict[t][:3] == "cal" for t in targets] )
 
 
-print("{} targets positions in total.".format( nsci ))
-print("{} cal. targets in total.".format( ncal ))
-print("{} sky positions in total.".format( nsky ))
+#print("{} targets positions in total.".format( nsci ))
+#print("{} cal. targets in total.".format( ncal ))
+#print("{} sky positions in total.".format( nsky ))
 
 nwf_results_nvisits = {}
 #nwf_results_nvisits[12] = ascii.read("nwf_results_nvisits12.txt")
 #nwf_results_nvisits[12] = ascii.read("nwf_results_nvisits12.txt")
-nwf_results_nvisits[10] = ascii.read("nwf_results_nvisits10_early_obs1.txt")
+#nwf_results_nvisits[10] = ascii.read("nwf_results_nvisits10_early_obs1.txt")
 #nwf_results_nvisits[9] = ascii.read("nwf_results_nvisits9.txt")
 #nwf_results_nvisits[8] = ascii.read("nwf_results_nvisits8.txt")
 #nwf_results_nvisits[7] = ascii.read("nwf_results_nvisits7.txt")
@@ -963,6 +963,7 @@ plt.text(1,nsci_observable+50,"max # science targets observable".format(nsci_obs
 plt.ylabel("# science targets observed")
 plt.xlabel("visit")
 plt.ylim([500,8200])
+plt.show()
 
 if False:
     # test output for other solvers
