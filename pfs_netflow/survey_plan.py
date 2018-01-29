@@ -46,8 +46,7 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, class_dict,
     T = dm.Sink("SINK")
     g.add_node(T)
 
-    # Add nodes for the cobras and the cobra visists
-    #  and arcs between them
+    # Add nodes for the cobras and the cobra visits and arcs between them
     for cid in cobras:
         x, y = cobras[cid]
         if (x-CENTER[0])**2 + (y-CENTER[1])**2 > RMAX**2:
@@ -61,8 +60,7 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, class_dict,
             cvid = "C_{}_v{}".format(cid, visit)
             cv = dm.CobraVisit(id=cvid, cobra=c, visit=visit)
             g.add_node(cv)
-            cvca = dm.CobraVisitToCobraArc(cv, c)
-            g.add_arc(cvca)
+            g.add_arc(dm.CobraVisitToCobraArc(cv, c))
 
     # Add nodes for target classes
     for tc in np.unique(list(class_dict.values())):
@@ -75,8 +73,7 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, class_dict,
             g.add_node(targetClass)
 
             # Add costly overflow arc to the target class
-            targetClassOverFlowArc = dm.OverflowArc(targetClass.cost, targetClass, T)
-            g.add_arc(targetClassOverFlowArc)
+            g.add_arc(dm.OverflowArc(targetClass.cost, targetClass, T))
         elif tc.startswith("cal_") or tc.startswith("sky_"):
             for visit in g.visits:
                 targetClass = dm.CalTargetClass("TClass_{}_v{}".format(tc, visit))
@@ -85,8 +82,7 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, class_dict,
                 g.add_node(targetClass)
 
                 # Add costly overflow arc to the target class
-                targetClassOverFlowArc = dm.OverflowArc(targetClass.cost, targetClass, T)
-                g.add_arc(targetClassOverFlowArc)
+                g.add_arc(dm.OverflowArc(targetClass.cost, targetClass, T))
         else:
             print("Error unknown target class {}".format(tc))
 
@@ -113,7 +109,7 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, class_dict,
                 # increasing the cost for later visits encourages
                 # earlier observation.
                 ttva.cost = cost_dict["visits"][visit]
-                e = g.add_arc(ttva)
+                g.add_arc(ttva)
 
             # Add arc from target class to target
             targetClass = g.sciTargetClasses["TClass_{}".format(tc)]
@@ -221,6 +217,6 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, class_dict,
                         a.cost = costOfD(d)
                         a.d = d
 
-                        e = g.add_arc(a)
+                        g.add_arc(a)
 
     return g

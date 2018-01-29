@@ -62,8 +62,7 @@ class SurveyPlan(Network):
     def __init__(self):
         super(SurveyPlan, self).__init__()
         # These are just handy for quick access to a certain type of
-        # node or arc.
-        # nodes
+        # node or arc nodes
         self.cobras = OrderedDict()
         self.cobraVisits = OrderedDict()
         self.targets = {}
@@ -103,7 +102,6 @@ class SurveyPlan(Network):
             self.calTargetClasses[node.id] = node
         elif type(node) == SciTargetClass:
             self.sciTargetClasses[node.id] = node
-
         elif type(node) == Sink:
             self.sinks[node.id] = node
         else:
