@@ -23,20 +23,28 @@ class Node(NetworkElement):
 
 
 class Sink(Node):
-    def __init__(self, id):
-        super(Sink, self).__init__(id)
+    def __init__(self):
+        super(Sink, self).__init__("SINK")
 
 
 class Cobra(Node):
-    def __init__(self, id, x, y):
-        super(Cobra, self).__init__(id)
+    @staticmethod
+    def getID(cid):
+        return "C_{}".format(cid)
+
+    def __init__(self, cid, x, y):
+        super(Cobra, self).__init__(self.getID(cid))
         self.x = x
         self.y = y
 
 
 class CobraVisit(Node):
-    def __init__(self, id, cobra, visit):
-        super(CobraVisit, self).__init__(id)
+    @staticmethod
+    def getID(cid, visit):
+        return "C_{}_v{}".format(cid, visit)
+
+    def __init__(self, cid, cobra, visit):
+        super(CobraVisit, self).__init__(self.getID(cid, visit))
         self.visit = visit
         self.cobra = cobra
 
@@ -195,14 +203,22 @@ class TargetClass(Node):
 
 
 class CalTargetClass(TargetClass):
-    def __init__(self, id):
-        super(CalTargetClass, self).__init__(id)
+    @staticmethod
+    def getID(tc, visit):
+        return "TClass_{}_v{}".format(tc, visit)
+
+    def __init__(self, tc, visit):
+        super(CalTargetClass, self).__init__(self.getID(tc, visit))
         self.visit = None
 
 
 class SciTargetClass(TargetClass):
-    def __init__(self, id):
-        super(SciTargetClass, self).__init__(id)
+    @staticmethod
+    def getID(tc):
+        return "TClass_{}".format(tc)
+
+    def __init__(self, tc):
+        super(SciTargetClass, self).__init__(self.getID(tc))
         # Describes cost of partial completion.
         # Typically this should be a higher cost
         # than not observing the target at all.
@@ -220,8 +236,12 @@ class Target(Node):
 
 
 class SciTarget(Target):
-    def __init__(self, id, x, y, gain=3):
-        super(SciTarget, self).__init__(id, x, y, gain)
+    @staticmethod
+    def getID(tid):
+        return "T_{}".format(tid)
+
+    def __init__(self, tid, x, y, gain=3):
+        super(SciTarget, self).__init__(self.getID(tid), x, y, gain)
 
 
 class CalTarget(Target):
@@ -230,13 +250,21 @@ class CalTarget(Target):
     an arbitrary number of times while their required number of visits
     is always one. A reobservation will therefore never be enforced.
     """
-    def __init__(self, id, x, y, visit, gain=3):
-        super(CalTarget, self).__init__(id, x, y, gain)
+    @staticmethod
+    def getID(tid, visit):
+        return "T_{}_v{}".format(tid, visit)
+
+    def __init__(self, tid, x, y, visit, gain=3):
+        super(CalTarget, self).__init__(self.getID(tid, visit), x, y, gain)
         self.visit = visit
 
 
 class TargetVisit(Node):
-    def __init__(self, id, target, visit):
-        super(TargetVisit, self).__init__(id)
+    @staticmethod
+    def getID(tid, visit):
+        return "T_{}_v{}".format(tid, visit)
+
+    def __init__(self, tid, target, visit):
+        super(TargetVisit, self).__init__(self.getID(tid, visit))
         self.visit = visit
         self.target = target
