@@ -8,10 +8,6 @@ import time
 import pulp
 from astropy.io import ascii
 
-def pp(s):
-    print(s)
-    return s + "\n"
-
 import pfs_netflow.datamodel as dm
 
 #BLOCKLENGTH = 300. # block exposure time in s, to simulate three consequtive exposures
@@ -87,8 +83,7 @@ priorities = np.array(priorities)
 priorities[ii_sci] = newpri
 priorities = priorities.tolist()
 
-# compute number of required visists from exposure times
-# and block length
+# compute number of required visists from exposure times and block length
 nreqv_dict = {}
 for id,t,nrv in zip(ID, types, np.array(exp_times)/BLOCKLENGTH):
     nreqv_dict[id] = int(nrv)
@@ -157,30 +152,6 @@ for v in visibility_map:
     cc = ["{:d}".format(c) for c in visibility_map[v]]
     visibilities[t] = cc
 
-if False:
-    f = plt.figure(figsize=[10,10])
-    cxx = [c[0] for cid, c in cobras.items()]
-    cyy = [c[1] for cid, c in cobras.items()]
-    txx = [t[0] for tid, t in targets.items()]
-    tyy = [t[1] for tid, t in targets.items()]
-
-    if True:
-        for tid,cc in visibilities.items():
-            tx,ty = targets[tid]
-            for c in cc:
-                cx,cy = cobras[c]
-                #print c
-                #plt.text(cx,cy,"{}".format(c) )
-                plt.plot([cx,tx],[cy,ty],'k-')
-
-
-    plt.plot(cxx,cyy,'.')
-    plt.plot(txx,tyy,'.')
-
-    plt.axis('equal')
-    plt.xlim([-20,20])
-    plt.ylim([-20,20])
-    plt.show()
 # perform target assignment using the "draining" algorithm, and return the list
 # of assigned targets and which cobras were used to observe them.
 #res = pyETS.getObs(ets_target_pos,exp_times,priorities,ets_cobras,"draining_closest")
@@ -349,11 +320,6 @@ def fil(xx,bb):
         if b: new.append(x)
     return new
 
-ALGORITHM = "new"
-ALGORITHM = "draining"
-ALGORITHM = "naive"
-ALGORITHM = "draining_closest"
-
 ALL_ALGORITHM = ["new", "draining", "naive", "draining_closest"]
 
 for ALGORITHM in ALL_ALGORITHM:
@@ -392,7 +358,7 @@ for ALGORITHM in ALL_ALGORITHM:
             #res = pyETS.getObs(fil(ets_target_pos,ii),fil(exp_times,ii),fil(priorities,ii),ets_cobras,"draining_closest")
             res = pyETS.getObs(ets_target_pos,exp_times,priorities2,ets_cobras,ALGORITHM)
             time_to_build = time.time() - start_time
-            pp(" Time to solve: {:.4e} s".format(time_to_build))
+            print (" Time to solve: {:.4e} s".format(time_to_build))
 
 
 
@@ -534,9 +500,9 @@ CENTER = [0.,0.]
 name="intermediate"
 
 # do them all!
-RMAX = 300.
-CENTER = [-0.,0.]
-name="all"
+#RMAX = 300.
+#CENTER = [-0.,0.]
+#name="all"
 
 # good very minimal example
 RMAX = 25.
@@ -546,9 +512,9 @@ name="tiny"
 
 
 # good very minimal example
-RMAX = 10.
-CENTER = [-0.,0.]
-name="tinytiny"
+#RMAX = 10.
+#CENTER = [-0.,0.]
+#name="tinytiny"
 
 
 
@@ -611,27 +577,26 @@ NCalTargets = len(g.calTargets)
 
 maxSeconds = 600.
 
-summary = ""
-summary += pp("NVISITS = {}".format(NVISITS))
-summary += pp("Searching optimal strategy to observe in ")
-summary += pp(" {} visits".format(NVISITS))
-summary += pp(" {} science targets".format(NSciTargets))
-summary += pp(" {} calib. targets".format(NCalTargets/NVISITS))
-summary += pp(" {} cobras".format(NCobras))
-summary += pp("Will stop in any case after {} s.".format(maxSeconds))
+print("NVISITS = {}".format(NVISITS))
+print("Searching optimal strategy to observe in ")
+print(" {} visits".format(NVISITS))
+print(" {} science targets".format(NSciTargets))
+print(" {} calib. targets".format(NCalTargets/NVISITS))
+print(" {} cobras".format(NCobras))
+print("Will stop in any case after {} s.".format(maxSeconds))
 
 
-summary += pp("num nodes: {}".format(len(g.nodes)))
-summary += pp("num edges: {}".format(len(g.arcs)))
+print("num nodes: {}".format(len(g.nodes)))
+print("num edges: {}".format(len(g.arcs)))
 
 #visualizeSurveyPlan(g)
 
-summary += pp("Building LP problem ...")
+print("Building LP problem ...")
 start_time = time.time()
 prob, flows, cost = buildLPProblem(g, cat='Integer')
 #prob, flows, cost = buildLPProblem(g, cat='Continuous')
 time_to_build = time.time() - start_time
-summary += pp("Time to build model: {:.4e} s".format(time_to_build))
+print("Time to build model: {:.4e} s".format(time_to_build))
 
 __ = prob.writeMPS("pfi_cosmo_{}_{}_visits_rand_nreq.mps".format(name,NVISITS), rename=1)
 
@@ -695,32 +660,30 @@ maxSeconds=2400.
 np.random.seed(42)
 
 # Solve problem!
-summary += pp("Solving LP problem ...")
+print("Solving LP problem ...")
 start_time = time.time()
 
 
-#status = solve(prob, maxSeconds=maxSeconds)
 status = solve(prob) #, solver="GUROBI")
 
 
 time_to_solve = time.time() - start_time
-summary += pp("Solve status is [{}].".format( pulp.LpStatus[status] ))
-summary += pp("Time to solve: {:.4e} s".format(time_to_solve))
+print("Solve status is [{}].".format( pulp.LpStatus[status] ))
+print("Time to solve: {:.4e} s".format(time_to_solve))
 
 stats = computeStats(g, flows, cost)
 
-summary += pp("{} = {}".format('Value of cost function',pulp.value(stats.cost) ) )
-summary += pp("[{}] out of {} science targets get observed.".format(int(stats.NSciObs),NSciTargets))
-summary += pp("For {} out of these all required exposures got allocated.".format(stats.NSciComplete))
-summary += pp("{} targets get sent down the overflow arc.".format(stats.Noverflow))
-summary += pp("{} out of {} cobras observed a target in one or more exposures.".format(stats.Ncobras_used, NCobras ))
-summary += pp("{} cobras observed a target in all exposures.".format(stats.Ncobras_fully_used))
+print("{} = {}".format('Value of cost function',pulp.value(stats.cost) ) )
+print("[{}] out of {} science targets get observed.".format(int(stats.NSciObs),NSciTargets))
+print("For {} out of these all required exposures got allocated.".format(stats.NSciComplete))
+print("{} targets get sent down the overflow arc.".format(stats.Noverflow))
+print("{} out of {} cobras observed a target in one or more exposures.".format(stats.Ncobras_used, NCobras ))
+print("{} cobras observed a target in all exposures.".format(stats.Ncobras_fully_used))
 
 setflows(g,flows)
 
 # test if really no colliding targets were observed
 # This needs to be added to the survey plan and buildLPProblem methods.
-#
 
 flow_pairs = compute_collision_flow_pairs(collision_pairs)
 
@@ -907,34 +870,10 @@ def setflows(g,flows):
         if k in flows:
             a.flow = pulp.value(flows[k])
 
-if False:
-    plotFocalPlane(g, visit=1, W=20)
-    plotSurveyPlan(g)
-
-
-#nsci = sum( [class_dict[t][:3] == "sci" for t in targets] )
-#ncal = sum( [class_dict[t][:3] == "cal" for t in targets] )
-#nsky = sum( [class_dict[t][:3] == "sky" for t in targets] )
-
-#sum( [class_dict[t][:3] == "cal" for t in targets] )
-
-
-#print("{} targets positions in total.".format( nsci ))
-#print("{} cal. targets in total.".format( ncal ))
-#print("{} sky positions in total.".format( nsky ))
+nsci = sum( [class_dict[t][:3] == "sci" for t in targets] )
 
 nwf_results_nvisits = {}
-#nwf_results_nvisits[12] = ascii.read("nwf_results_nvisits12.txt")
-#nwf_results_nvisits[12] = ascii.read("nwf_results_nvisits12.txt")
 nwf_results_nvisits[10] = ascii.read("nwf_results_nvisits2_early_obs2.txt")
-#nwf_results_nvisits[9] = ascii.read("nwf_results_nvisits9.txt")
-#nwf_results_nvisits[8] = ascii.read("nwf_results_nvisits8.txt")
-#nwf_results_nvisits[7] = ascii.read("nwf_results_nvisits7.txt")
-#nwf_results_nvisits[6] = ascii.read("nwf_results_nvisits6.txt")
-#nwf_results_nvisits[5] = ascii.read("nwf_results_nvisits5.txt")
-#nwf_results_nvisits[4] = ascii.read("nwf_results_nvisits4.txt")
-#nwf_results_nvisits[3] = ascii.read("nwf_results_nvisits3.txt")
-#nwf_results_nvisits[2] = ascii.read("nwf_results_nvisits2.txt")
 
 ets_results = {}
 ets_results["draining_closest"] = ascii.read("ets_results_draining_closest.txt")
@@ -942,15 +881,10 @@ ets_results["draining"] = ascii.read("ets_results_draining.txt")
 ets_results["naive"] = ascii.read("ets_results_naive.txt")
 ets_results["new"] = ascii.read("ets_results_new.txt")
 
-#ascii.read("ets_results_draining_closest.txt",format
-
 f = plt.figure(figsize=[8,8])
 
 for alg in ets_results:
     plt.plot(ets_results[alg]['V']+1, ets_results[alg]['nsci_total'],'o-', label=alg)
-
-#for nvisits in nwf_results_nvisits:
-#    plt.plot(nwf_results_nvisits[nvisits]['V']+1, nwf_results_nvisits[nvisits]['nsci_total'],'ks-', label=alg, color='grey', ms=8)
 
 nvisits = 10
 plt.plot(nwf_results_nvisits[nvisits]['V']+1, nwf_results_nvisits[nvisits]['nsci_total'],'ks-', label="netflow", color='grey', ms=8)
@@ -964,19 +898,6 @@ plt.ylabel("# science targets observed")
 plt.xlabel("visit")
 plt.ylim([500,8200])
 plt.show()
-
-if False:
-    # test output for other solvers
-    # build problem save to MPS
-
-    summary += pp("Building LP problem ...")
-    start_time = time.time()
-    #prob, flows, cost = buildLPProblem(g, cat='Integer')
-    prob, flows, cost = buildLPProblem(g, cat='Continuous')
-    time_to_build = time.time() - start_time
-    summary += pp("Time to build model: {:.4e} s".format(time_to_build))
-
-    prob.writeMPS("pfi_cosmo_{}_{}_visits_rand_nreq.mps".format(name,NVISITS), rename=1)
 
 RSEP = 5.
 
@@ -1001,10 +922,6 @@ if RSEP > 0.:
             #print t1.id,t2.id
 
     print( "Found {} collision pairs.".format(len( coll_pairs )) )
-
-    #for tid,t in tt:
-    #    prob += pulp.lpSum( [ flows['{}={}'.format(a.startnode.id,a.endnode.id)] for a in t.outarcs]) <= 1
-
 
 i = 0
 
@@ -1032,13 +949,6 @@ if True:
             a.flow = pulp.value(flows[k])
     plotSurveyPlan(g)
     #return
-
-if False:
-    def rescue_code(function):
-        import inspect
-        get_ipython().set_next_input("".join(inspect.getsourcelines(function)[0]))
-
-    rescue_code(buildSurveyPlan)
 
 # find collision pairs
 
@@ -1090,12 +1000,8 @@ for i in range(cc.shape[0]):
             x2,y2 =  txx[j], tyy[j]
             collision_pairs.append([(ID[i],x1,y1),(ID[j],x2,y2)])
 
-
-
-
 for cp in collision_pairs:
     plt.plot([cp[0][1],cp[1][1]],[cp[0][2],cp[1][2]],'r-')
-    #plt.plot(txx[ii_cal],tyy[ii_cal],'yo' , label='cal. star')
 
 print(len(collision_pairs))
 
