@@ -50,7 +50,7 @@ types = ["sci"]*len(science_targets) + ["cal"]*len(cal_stars) + ["sky"]*len(sky_
 class_dict = {}
 for id,t,p in zip(ID, types, priorities):
     class_dict[id] = '{}_P{}'.format(t, p)
-    
+
 # limit targets to a smaller field of view
 pointing_RA, pointing_DEC = 33.7025, -3.8455
 
@@ -79,7 +79,7 @@ ii_sky = c == 'sky'
 
 np.random.seed(42)
 
-N =  sum(ii_sci) 
+N =  sum(ii_sci)
 
 newpri = np.array( np.random.uniform(1.,4., size=N) , dtype=int)
 priorities = np.array(priorities)
@@ -92,14 +92,14 @@ priorities = priorities.tolist()
 nreqv_dict = {}
 for id,t,nrv in zip(ID, types, np.array(exp_times)/BLOCKLENGTH):
     nreqv_dict[id] = int(nrv)
-    
+
 print("Required revisits", np.unique( [v for v in nreqv_dict.values()] ))
 
 # RANDOMISE NUMBER OF REQUIRED VISISTS
 RANDOMIZENREQ = True
 if RANDOMIZENREQ:
     NVISITS = 10
-    nv = np.floor( np.random.uniform(NVISITS+1, size=len(ID)) ) 
+    nv = np.floor( np.random.uniform(NVISITS+1, size=len(ID)) )
 
     # compute number of required visists from exposure times
     # and block length
@@ -151,7 +151,7 @@ for i,c in enumerate(ets_target_pos):
         targets[ID[i]] = [float(x),float(y)]
 
 # obtain visibilities in old ETS dictionary style
-visibilities = OrderedDict()   
+visibilities = OrderedDict()
 for v in visibility_map:
     t = ID[v]
     cc = ["{:d}".format(c) for c in visibility_map[v]]
@@ -259,7 +259,7 @@ points = list(zip(txx,tyy))
 Y = cdist( points[:N], points[:N] )
 
 # any target separation that is smaller than 2 x the collision radius will be flagged as collision
-cc = Y <= (fiber_collision_radius*2.) 
+cc = Y <= (fiber_collision_radius*2.)
 ncoll = int( (np.sum(cc.flatten()) - N)/2. )
 
 print ("Found  {:d} collision pairs.".format( ncoll  ))
@@ -271,14 +271,14 @@ ii = np.arange(N)
 for i in range(cc.shape[0]):
     x1,y1 =  txx[i], tyy[i]
     # only iterate over the indeces that are colliding and the upper diagonal in the collision matrix
-    jj = ii[ cc[i,:] * ii > i ] 
-    for j in jj: 
+    jj = ii[ cc[i,:] * ii > i ]
+    for j in jj:
         if cc[i,j]:
             x2,y2 =  txx[j], tyy[j]
             collision_pairs.append([(ID[i],x1,y1),(ID[j],x2,y2)])
-            
-            
-            
+
+
+
 for cp in collision_pairs:
     plt.plot([cp[0][1],cp[1][1]],[cp[0][2],cp[1][2]],'r-')
     #plt.plot(txx[ii_cal],tyy[ii_cal],'yo' , label='cal. star')
@@ -329,8 +329,8 @@ for tid,v in visibilities.items():
         elif class_dict[tid][:3] == 'sci':
             nsci_observable += 1
         #break
-            
-            
+
+
 print("{} targets positions in total.".format(sum(ii_sci) ))
 print("{} cal. targets in total.".format(sum(ii_cal) ))
 print("{} sky positions in total.".format(sum(ii_sky) ))
@@ -348,7 +348,7 @@ def fil(xx,bb):
     for x,b in zip(xx,bb):
         if b: new.append(x)
     return new
-    
+
 ALGORITHM = "new"
 ALGORITHM = "draining"
 ALGORITHM = "naive"
@@ -361,7 +361,7 @@ for ALGORITHM in ALL_ALGORITHM:
     NVISISTS = 10
     ii = np.full_like(ID, True, dtype=bool)
 
-    # set priorities 
+    # set priorities
     priorities2 = np.array(priorities)
     priorities2[ii_sci] = 5
     priorities2[~ii_sci] = 1
@@ -437,7 +437,7 @@ plt.show()
 
 cost_dict = {}
 # For each target class we define the cost of non-observation
-# and non-completion as a two-tuple. The cost of non-completion 
+# and non-completion as a two-tuple. The cost of non-completion
 # is typically larger as partial completion of objects should be avoided.
 cost_dict['sci_P1'] = (1000.,1e9)
 cost_dict['sci_P2'] = (100.,1e9)
@@ -446,7 +446,7 @@ cost_dict['sci_P3'] = (10.,1e9)
 # For the calibration objects we only define the cost
 # of non-observation as calibration targets only *need* to be visited once.
 # Note: The can of course be visited many times. But
-# for the calibration objects the real constraint is to have 
+# for the calibration objects the real constraint is to have
 # at least N out of M observed in each exposure.
 # There is no requirement to revisit a specific calibration target.
 cost_dict['cal_P1'] = 10000.
@@ -456,11 +456,11 @@ cost_dict['sky_P1'] = 10000.
 cost_dict['visits'] = [i*10. for i in np.arange(10)]
 
 # Here we discourage large cobra moves. The example here is a simple
-# linear function cost = A * move_distance 
+# linear function cost = A * move_distance
 # where the parameter A controls how quickly the cost increases as funciton of distance.
 #A = 250.
 A = 0.
-cost_dict['cobra_move'] = lambda d : d*A  
+cost_dict['cobra_move'] = lambda d : d*A
 
 
 
@@ -559,17 +559,17 @@ g = buildSurveyPlan(cobras, targets, nreqvisits, visibilities, class_dict, cost_
 print("Done.")
 
 for c in g.sciTargetClasses:
-    
+
     nsci = 0
     nsci_reachable = 0
     for t in g.sciTargetClasses[c].targets.values():
         if t.outarcs != []:
             nsci += 1
             nsci_reachable += 1
-        
+
     print("Number of targets in {} is {}.".format(c, nsci ) )
     print("Number of observable targets in {} is {}.".format(c, nsci_reachable ) )
-    
+
 
 ncal = 0
 ncal_reachable = 0
@@ -578,8 +578,8 @@ for t in g.calTargetClasses['TClass_cal_P1_v0'].targets.values():
         ncal += 1
         ncal_reachable += 1
 print("Number of calibration stars: {}".format(ncal) )
-print("Number of observable calibration stars: {}".format( ncal_reachable )) 
-            
+print("Number of observable calibration stars: {}".format( ncal_reachable ))
+
 
 nsky = 0
 nsky_reachable = 0
@@ -592,7 +592,7 @@ print("Number of observable sky positions: {}".format(nsky_reachable) )
 
 #if RMAX == 10. and False:
 #    plotSurveyPlan(g)
-    
+
 
 # build the LP problem
 from pfs_netflow.lp import buildLPProblem, computeStats, solve
@@ -604,7 +604,7 @@ def setflows(g,flows):
             a.flow = pulp.value(flows[k])
 
 
-    
+
 NCobras = len(g.cobras)
 NSciTargets = len(g.sciTargets)
 NCalTargets = len(g.calTargets)
@@ -649,7 +649,7 @@ def compute_collision_flow_pairs(collision_pairs):
        identify the input flow arc (ther can be only one) for each of the two targets in the pair
        add the flow pairs to a list
      loop over all flow pairs and add a constraint equation
-    """ 
+    """
     flow_pairs = []
 
     for cp in collision_pairs:
@@ -679,11 +679,11 @@ def compute_collision_flow_pairs(collision_pairs):
 
             flow_pairs.append([f1id, f2id])
     return flow_pairs
-  
+
 ENABLE_COLLISION_AVOIDANCE = True
 if ENABLE_COLLISION_AVOIDANCE:
     flow_pairs = compute_collision_flow_pairs(collision_pairs)
-    print("Adding {} collision avoidance constraints.".format(len(flow_pairs)))              
+    print("Adding {} collision avoidance constraints.".format(len(flow_pairs)))
     for fp in flow_pairs:
         prob += pulp.lpSum( [ flows[ fp[0] ], flows[ fp[1] ] ] ) <= 1.
 
@@ -723,14 +723,14 @@ setflows(g,flows)
 #
 
 flow_pairs = compute_collision_flow_pairs(collision_pairs)
- 
+
 NCOLL = 0
 for fp in flow_pairs:
-    
+
     if pulp.value( flows[ fp[0] ] ) > 0. and pulp.value( flows[ fp[1] ] ) > 0.:
         #print("{} {} in collision".format(fp[0],fp[1]))
         NCOLL += 1
-                             
+
 print("Detected {} collisions".format(NCOLL))
 
 pulp.value( flows[ fp[1] ] )
@@ -740,7 +740,7 @@ def setflows(g,flows):
         k = '{}={}'.format(a.startnode.id,a.endnode.id)
         if k in flows:
             a.flow = pulp.value(flows[k])
-            
+
 if True:
     plotFocalPlane(g, visit=1, W=25)
     plotSurveyPlan(g)
@@ -749,22 +749,22 @@ plotSurveyPlan(g)
 
 
 visit = 0
- 
+
 # initialize assigment list with Null
 # as required by the collision simulator code.
 assignments = OrderedDict()
 for c in g.cobras.values():
     assignments[c.id] = 'Null'
 
-# Now find which cobras have been assigned to which targets. 
+# Now find which cobras have been assigned to which targets.
 # Loop over all targetVisit to CobraVisit arcs.Filter for those that correspond to the current visit.
 for a in [x for x in iter(g.targetVisitToCobraVisitArcs.values()) if x.visit == visit]:
-    
+
     if a.flow > 0.:
         t = a.startnode.target
-        c = a.endnode.cobra 
+        c = a.endnode.cobra
         assignments[c.id] = t.id
-        
+
 for cid,tid in assignments.items():
     print("{:6s} observes {:10s}".format(cid, tid))
 
@@ -792,14 +792,14 @@ print("Number of cobras:", bench.cobras.nCobras)
 # Calculate the total number of targets based on the bench properties
 #    medianPatrolAreaRadius = np.median(bench.cobras.rMax)
 
-    
+
 #    nTargets = int(np.ceil(density * (bench.radius / medianPatrolAreaRadius) ** 2))
-    
+
     # Calculate the uniformly distributed target positions
 #    ang = 2 * np.pi * np.random.random(nTargets)
 #    radius = bench.radius * np.sqrt(np.random.random(nTargets))
 #    targetPositions = bench.center + radius * np.exp(1j * ang)
-    
+
 #    return TargetGroup(targetPositions)
 
 
@@ -885,13 +885,13 @@ with open("nwf_results_nvisits{}_early_obs2.txt".format(NVISITS), 'w') as f:
                                 nsky += 1
 
                             else:
-                                ncal += 1 
+                                ncal += 1
                         except:
                             pass
 
         s = "{:3d} {:5d} {:5d} {:5d} {:5d}\n".format(visit, nsci, ncal, nsky, nsci_observed_total)
         f.write(s)
-        
+
         print(" Observed {} science targets, {} calibration targets and {} sky positions.".format(nsci, ncal, nsky))
         print(" Observed {} science targets in total.".format(nsci_observed_total))
         #print("")
@@ -906,7 +906,7 @@ def setflows(g,flows):
         k = '{}={}'.format(a.startnode.id,a.endnode.id)
         if k in flows:
             a.flow = pulp.value(flows[k])
-            
+
 if False:
     plotFocalPlane(g, visit=1, W=20)
     plotSurveyPlan(g)
@@ -926,7 +926,7 @@ if False:
 nwf_results_nvisits = {}
 #nwf_results_nvisits[12] = ascii.read("nwf_results_nvisits12.txt")
 #nwf_results_nvisits[12] = ascii.read("nwf_results_nvisits12.txt")
-#nwf_results_nvisits[10] = ascii.read("nwf_results_nvisits10_early_obs1.txt")
+nwf_results_nvisits[10] = ascii.read("nwf_results_nvisits2_early_obs2.txt")
 #nwf_results_nvisits[9] = ascii.read("nwf_results_nvisits9.txt")
 #nwf_results_nvisits[8] = ascii.read("nwf_results_nvisits8.txt")
 #nwf_results_nvisits[7] = ascii.read("nwf_results_nvisits7.txt")
@@ -992,7 +992,7 @@ if RSEP > 0.:
     colls = distance.cdist(tt_xy, tt_xy, 'euclidean') < RSEP
     # set lower diagonal to False, if we know that A collides with B already
     # then we don't need to take into account that B collides with A
-    colls[ np.tril_indices(N) ] = False 
+    colls[ np.tril_indices(N) ] = False
 
     coll_pairs = []
     for i,t1 in enumerate(tt):
@@ -1004,7 +1004,7 @@ if RSEP > 0.:
 
     #for tid,t in tt:
     #    prob += pulp.lpSum( [ flows['{}={}'.format(a.startnode.id,a.endnode.id)] for a in t.outarcs]) <= 1
-    
+
 
 i = 0
 
@@ -1070,7 +1070,7 @@ Y = cdist( points[:N], points[:N] )
 
 
 # any target separation that is smaller than 2 x the collision radius will be flagged a s collision
-cc = Y <= (fiber_collision_radius*2.) 
+cc = Y <= (fiber_collision_radius*2.)
 
 ncoll = int( (np.sum(cc.flatten()) - N)/2. )
 
@@ -1084,15 +1084,15 @@ ii = np.arange(N)
 for i in range(cc.shape[0]):
     x1,y1 =  txx[i], tyy[i]
     # only iterate over the indeces that are colliding and the upper diagonal in the collision matrix
-    jj = ii[ cc[i,:] * ii > i ] 
-    for j in jj: 
+    jj = ii[ cc[i,:] * ii > i ]
+    for j in jj:
         if cc[i,j]:
             x2,y2 =  txx[j], tyy[j]
             collision_pairs.append([(ID[i],x1,y1),(ID[j],x2,y2)])
-            
-            
 
-            
+
+
+
 for cp in collision_pairs:
     plt.plot([cp[0][1],cp[1][1]],[cp[0][2],cp[1][2]],'r-')
     #plt.plot(txx[ii_cal],tyy[ii_cal],'yo' , label='cal. star')
