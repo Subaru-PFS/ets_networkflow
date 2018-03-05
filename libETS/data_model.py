@@ -45,9 +45,13 @@ class Cobra(object):
 
 
 class Telescope(object):
-    def __init__(self, Cobras, collisionRadius):
+    def __init__(self, Cobras, collisionRadius, ra, dec, posang, time):
         self._Cobras = tuple(Cobras)
         self._cobraCollisionRadius = float(collisionRadius)
+        self._ra = float(ra)
+        self._dec = float(dec)
+        self._posang = float(posang)
+        self._time = str(time)
 
     @property
     def Cobras(self):
@@ -66,6 +70,20 @@ class Telescope(object):
         variable.
         """
         return self._cobraCollisionRadius
+
+    def select_visible_targets(self, tgt):
+        for t in tgt:
+            t.calc_position(self._ra, self._dec, self._posang, self._time)
+        pos = [t.position for t in tgt]
+        cbr = []
+        for c in self._Cobras:
+            cbr.append([c.center, c.innerLinkLength, c.outerLinkLength,
+                        c.dotcenter, c.rdot])
+        tmp = pyETS.getVis(pos, cbr)
+        return [tgt[k] for k in tmp.keys()]
+
+    def observeWithNetflow(self, tgt, nvisit):
+        tgt = self.select_visible_targets(tgt)
 
 
 class Target(object):
@@ -98,21 +116,24 @@ class Target(object):
         return self._position
 
 
-class ScientificTarget(Target):
+class ScienceTarget(Target):
     def __init__(self, ID, ra, dec, obs_time, pri):
-        super(ScientificTarget, self).__init__(ID, ra, dec)
+        super(ScienceTarget, self).__init__(ID, ra, dec)
         self._obs_time = float(obs_time)
         self._pri = int(pri)
 
     @property
+    def priority(self):
+        """target priority : int"""
+        return self._pri
+
+    @property
     def nonObservationCost(self):
-        """target priority : float"""
-        pass
+        return self._non_obs_ost
 
     @property
     def partialObservationCost(self):
-        """target priority : float"""
-        pass
+        return self._partial_obs_cost
 
     @property
     def obs_time(self):
@@ -151,6 +172,7 @@ def telescopeRaDecFromFile(file):
                 decs.append(dec)
     return float(np.average(ras)), float(np.average(decs))
 
+
 def readScientificFromFile(file):
     with open(file) as f:
         res = []
@@ -160,8 +182,9 @@ def readScientificFromFile(file):
                 tt = l.split()
                 id_,ra,dec,tm,pri = (str(tt[0]), float(tt[1]), float(tt[2]),
                                        float(tt[3]), int(tt[4]))
-                res.append(ScientificTarget(id_, ra, dec, tm, pri))
+                res.append(ScienceTarget(id_, ra, dec, tm, pri))
     return res
+
 
 def readCalibrationFromFile(file, cls):
     with open(file) as f:
@@ -173,6 +196,7 @@ def readCalibrationFromFile(file, cls):
                 id_,ra,dec = (str(tt[0]), float(tt[1]), float(tt[2]))
                 res.append(cls(id_, ra, dec))
     return res
+
 
 def getFocalPlane():
     cobras = pyETS.getAllCobras()
@@ -189,17 +213,21 @@ fscience_targets = catalog_path+"/pfs_preliminary_target_cosmology.dat"
 fcal_stars       = catalog_path+"/pfs_preliminary_target_cosmology_fcstars.dat"
 fsky_pos         = catalog_path+"/pfs_preliminary_target_cosmology_sky.dat"
 
-raTel, decTel = telescopeRaDecFromFile(fscience_targets)
-posang = 0.
-time = "2016-04-03T08:00:00Z"
-
 tgt = readScientificFromFile(fscience_targets)
 tgt += readCalibrationFromFile(fcal_stars, StarCalibTarget)
 tgt += readCalibrationFromFile(fsky_pos, SkyCalibTarget)
-print(tgt)
+
 cobras = getFocalPlane()
-telescope = Telescope(cobras, 1.)
-for t in tgt:
-    t.calc_position(raTel, decTel, posang, time)
-for t in tgt:
-    print(t.position)
+
+# build reduced Cobra list to speed up calculation
+cobras = [c for c in cobras if abs(c.center) < 20]
+
+# point the telescope at the center of all science targets
+raTel, decTel = telescopeRaDecFromFile(fscience_targets)
+posang = 0.
+time = "2016-04-03T08:00:00Z"
+telescope = Telescope(cobras, 1., raTel, decTel, posang, time)
+
+# select only targets that are visible by the active cobras
+telescope.observeWithNetflow(tgt, 1)
+
