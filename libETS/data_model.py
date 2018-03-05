@@ -82,6 +82,37 @@ class Telescope(object):
         tmp = pyETS.getVis(pos, cbr)
         return [tgt[k] for k in tmp.keys()]
 
+    def subtract_obs_time(self, tgt, obs, tvisit):
+        res = []
+        for k in obs.keys():
+            tgt[k].reduce_time(tvisit)
+        for t in tgt:
+            if t.obs_time > 0.:
+                res.append(t)
+        return res
+
+    def observeWithETS(self, tgt, nvisit, tvisit, assigner):
+        tgt = self.select_visible_targets(tgt)
+
+        cbr = []
+        for c in self._Cobras:
+            cbr.append([c.center, c.innerLinkLength, c.outerLinkLength,
+                        c.dotcenter, c.rdot])
+
+        res = []
+        for i in range(nvisit):
+            pos = [t.position for t in tgt]
+            pri = [t.priority for t in tgt]
+            time = [t.obs_time for t in tgt]
+            tmp = pyETS.getObs(pos, time, pri, cbr, assigner)
+            d = {}
+            for key, value in tmp.items():
+                d[tgt[key].ID] = self._Cobras[value].ID
+            res.append(d)
+            tgt = self.subtract_obs_time(tgt, tmp, tvisit)
+            print(len(tgt))
+        return res
+
     def observeWithNetflow(self, tgt, nvisit):
         tgt = self.select_visible_targets(tgt)
 
@@ -139,6 +170,9 @@ class ScienceTarget(Target):
     def obs_time(self):
         """required observation time : float"""
         return self._obs_time
+
+    def reduce_time(self, dt):
+        self._obs_time -= float(dt)
 
 
 class CalibTarget(Target):
@@ -214,8 +248,8 @@ fcal_stars       = catalog_path+"/pfs_preliminary_target_cosmology_fcstars.dat"
 fsky_pos         = catalog_path+"/pfs_preliminary_target_cosmology_sky.dat"
 
 tgt = readScientificFromFile(fscience_targets)
-tgt += readCalibrationFromFile(fcal_stars, StarCalibTarget)
-tgt += readCalibrationFromFile(fsky_pos, SkyCalibTarget)
+#tgt += readCalibrationFromFile(fcal_stars, StarCalibTarget)
+#tgt += readCalibrationFromFile(fsky_pos, SkyCalibTarget)
 
 cobras = getFocalPlane()
 
@@ -229,5 +263,6 @@ time = "2016-04-03T08:00:00Z"
 telescope = Telescope(cobras, 1., raTel, decTel, posang, time)
 
 # select only targets that are visible by the active cobras
-telescope.observeWithNetflow(tgt, 1)
-
+res=telescope.observeWithETS(tgt, 20, 300, "draining")
+#res=telescope.observeWithNetflow(tgt, 1)
+print(res)
