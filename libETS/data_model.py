@@ -69,14 +69,28 @@ class Telescope(object):
 
 
 class Target(object):
-    def __init__(self, ID, position):
+    def __init__(self, ID, ra, dec):
         self._ID = str(ID)
-        self._position = complex(position)
+        self._ra = float(ra)
+        self._dec = float(dec)
+        self._position = None
 
     @property
     def ID(self):
         """ID of the object : str"""
         return self._ID
+
+    @property
+    def ra(self):
+        """the rectascension : float"""
+
+    @property
+    def dec(self):
+        """the declination : float"""
+
+    def calc_position(self, raTel, decTel, posang, time):
+        self._position = pycconv.cconv([self._ra], [self._dec],
+                                       raTel,decTel,posang,time)[0]
 
     @property
     def position(self):
@@ -85,9 +99,10 @@ class Target(object):
 
 
 class ScientificTarget(Target):
-    def __init__(self, ID, position, obs_time):
-        super(ScientificTarget, self).__init__(ID, position)
+    def __init__(self, ID, ra, dec, obs_time, pri):
+        super(ScientificTarget, self).__init__(ID, ra, dec)
         self._obs_time = float(obs_time)
+        self._pri = int(pri)
 
     @property
     def nonObservationCost(self):
@@ -136,49 +151,27 @@ def telescopeRaDecFromFile(file):
                 decs.append(dec)
     return float(np.average(ras)), float(np.average(decs))
 
-def readScientificFromFile(file, raTel, decTel, posang,
-                           time="2016-04-03T08:00:00Z"):
+def readScientificFromFile(file):
     with open(file) as f:
-        ids=[]
-        ras=[]
-        decs=[]
-        times=[]
-        pris=[]
+        res = []
         ll=f.readlines()
         for l in ll[1:]:
             if not l.startswith("#"):
                 tt = l.split()
                 id_,ra,dec,tm,pri = (str(tt[0]), float(tt[1]), float(tt[2]),
                                        float(tt[3]), int(tt[4]))
-                ids.append(id_)
-                ras.append(ra)
-                decs.append(dec)
-                times.append(tm)
-                pris.append(pri)
-    pos = pycconv.cconv(ras,decs,raTel,decTel,posang,time)
-    res = []
-    for i in range(len(ids)):
-        res.append(ScientificTarget(ids[i], pos[i], times[i]))
+                res.append(ScientificTarget(id_, ra, dec, tm, pri))
     return res
 
-def readCalibrationFromFile(file, cls, raTel=None, decTel=None, posang=0.,
-                           time="2016-04-03T08:00:00Z"):
+def readCalibrationFromFile(file, cls):
     with open(file) as f:
-        ids=[]
-        ras=[]
-        decs=[]
+        res = []
         ll=f.readlines()
         for l in ll[1:]:
             if not l.startswith("#"):
                 tt = l.split()
                 id_,ra,dec = (str(tt[0]), float(tt[1]), float(tt[2]))
-                ids.append(id_)
-                ras.append(ra)
-                decs.append(dec)
-    pos = pycconv.cconv(ras,decs,raTel,decTel,posang,time)
-    res = []
-    for i in range(len(ids)):
-        res.append(cls(ids[i], pos[i]))
+                res.append(cls(id_, ra, dec))
     return res
 
 def getFocalPlane():
@@ -200,10 +193,13 @@ raTel, decTel = telescopeRaDecFromFile(fscience_targets)
 posang = 0.
 time = "2016-04-03T08:00:00Z"
 
-tgt = readScientificFromFile(fscience_targets, raTel, decTel, posang, time)
-tgt.append(readCalibrationFromFile(fcal_stars, StarCalibTarget, raTel, decTel, posang, time))
-tgt.append(readCalibrationFromFile(fsky_pos, SkyCalibTarget, raTel, decTel, posang, time))
-#print(tgt)
+tgt = readScientificFromFile(fscience_targets)
+tgt += readCalibrationFromFile(fcal_stars, StarCalibTarget)
+tgt += readCalibrationFromFile(fsky_pos, SkyCalibTarget)
+print(tgt)
 cobras = getFocalPlane()
 telescope = Telescope(cobras, 1.)
-
+for t in tgt:
+    t.calc_position(raTel, decTel, posang, time)
+for t in tgt:
+    print(t.position)
