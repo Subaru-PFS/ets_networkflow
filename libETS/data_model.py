@@ -8,6 +8,7 @@ from pfs_netflow.lp import buildLPProblem, computeStats, solve
 import time
 import pulp
 from pfs_netflow.plotting import plotSurveyPlan, plotFocalPlane
+import pfs_netflow.datamodel as dm
 
 
 class Cobra(object):
@@ -116,7 +117,6 @@ class Telescope(object):
                 d[tgt[key].ID] = self._Cobras[value].ID
             res.append(d)
             tgt = self.subtract_obs_time(tgt, tmp, tvisit)
-            print(len(tgt))
         return res
 
     def observeWithNetflow(self, tgt, nvisit, tvisit):
@@ -131,7 +131,6 @@ class Telescope(object):
         xcobras = OrderedDict()
         for i,c in enumerate(self._Cobras):
             xcobras[c.ID] = [np.real(c.center), np.imag(c.center)]
-        print(xcobras)
 
         targets = OrderedDict()
         for i,t in enumerate(tgt):
@@ -157,7 +156,6 @@ class Telescope(object):
             tid = tgt[key].ID
             cc = [self._Cobras[c].ID for c in val]
             visibilities[tid] = cc
-        print(visibilities)
 
         class_dict = {}
         cost_dict = {}
@@ -177,9 +175,6 @@ class Telescope(object):
                 raise TypeError
         A = 0.
         cost_dict['cobra_move'] = lambda d : d*A
-        print(class_dict)
-        print(supply_dict)
-        print(cost_dict)
 
         g = buildSurveyPlan(xcobras, targets, nreqvisit, visibilities,
                             class_dict, cost_dict, supply_dict, nvisit, 500.,
@@ -196,7 +191,31 @@ class Telescope(object):
 
 
         status = solve(prob, maxSeconds=100) #, solver="GUROBI")
+        def setflows(g,flows):
+            for a in g.arcs.values():
+                k = '{}={}'.format(a.startnode.id,a.endnode.id)
+                if k in flows:
+                    a.flow = pulp.value(flows[k])
+        setflows(g, flows)
 
+        res = []
+        for i in range(nvisit):
+            res.append({})
+        for a in g.arcs.values():
+            n1, n2 = a.startnode, a.endnode
+            if a.flow > 0.01:
+                if type(n2) == dm.CobraVisit and type(n1) == dm.TargetVisit:
+                    visit = n2.visit
+                    cobraID = n2.cobra.id[2:]
+                    targetID = n1.target.id[2:]
+                    res[visit][targetID] = cobraID
+                elif type(n2) == dm.CobraVisit and type(n1) == dm.CalTarget:
+                    visit = n2.visit
+                    cobraID = n2.cobra.id
+                    cobraID = cobraID[2:]
+                    vstr = "_v{}".format(visit)
+                    targetID = n1.id[2:-len(vstr)]
+                    res[visit][targetID] = cobraID
 
         time_to_solve = time.time() - start_time
         print("Solve status is [{}].".format( pulp.LpStatus[status] ))
@@ -214,7 +233,7 @@ class Telescope(object):
         print("{} targets get sent down the overflow arc.".format(stats.Noverflow))
         print("{} out of {} cobras observed a target in one or more exposures.".format(stats.Ncobras_used, len(self._Cobras) ))
         print("{} cobras observed a target in all exposures.".format(stats.Ncobras_fully_used))
-        plotSurveyPlan(g)
+        return res
 
 class Target(object):
     def __init__(self, ID, ra, dec):
