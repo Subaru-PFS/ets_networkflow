@@ -7,6 +7,8 @@ from pfs_netflow.survey_plan import buildSurveyPlan
 from pfs_netflow.lp import buildLPProblem, computeStats, solve
 import time
 import pulp
+from pfs_netflow.plotting import plotSurveyPlan, plotFocalPlane
+
 
 class Cobra(object):
     def __init__ (self, ID, center, dotcenter, rdot, li, lo):
@@ -128,12 +130,12 @@ class Telescope(object):
         # -
         xcobras = OrderedDict()
         for i,c in enumerate(self._Cobras):
-            xcobras["{:d}".format(i)] = [np.real(c.center), np.imag(c.center)]
+            xcobras[c.ID] = [np.real(c.center), np.imag(c.center)]
         print(xcobras)
+
         targets = OrderedDict()
         for i,t in enumerate(tgt):
             targets[t.ID] = [np.real(t.position), np.imag(t.position)]
-        print(targets)
 
         nreqvisit = []
         for t in tgt:
@@ -141,7 +143,6 @@ class Telescope(object):
                 nreqvisit.append(int(t.obs_time/tvisit))
             else:
                 nreqvisit.append(0)
-        print(nreqvisit)
 
         # determine visibilities
         pos = [t.position for t in tgt]
@@ -194,13 +195,26 @@ class Telescope(object):
         start_time = time.time()
 
 
-        status = solve(prob) #, solver="GUROBI")
+        status = solve(prob, maxSeconds=100) #, solver="GUROBI")
 
 
         time_to_solve = time.time() - start_time
         print("Solve status is [{}].".format( pulp.LpStatus[status] ))
         print("Time to solve: {:.4e} s".format(time_to_solve))
 
+        stats = computeStats(g, flows, cost)
+
+        NSciTargets = 0
+        for t in tgt:
+            if isinstance(t, ScienceTarget):
+                NSciTargets += 1
+        print("{} = {}".format('Value of cost function',pulp.value(stats.cost) ) )
+        print("[{}] out of {} science targets get observed.".format(int(stats.NSciObs),NSciTargets))
+        print("For {} out of these all required exposures got allocated.".format(stats.NSciComplete))
+        print("{} targets get sent down the overflow arc.".format(stats.Noverflow))
+        print("{} out of {} cobras observed a target in one or more exposures.".format(stats.Ncobras_used, len(self._Cobras) ))
+        print("{} cobras observed a target in all exposures.".format(stats.Ncobras_fully_used))
+        plotSurveyPlan(g)
 
 class Target(object):
     def __init__(self, ID, ra, dec):
@@ -365,7 +379,6 @@ posang = 0.
 otime = "2016-04-03T08:00:00Z"
 telescope = Telescope(cobras, 1., raTel, decTel, posang, otime)
 
-# select only targets that are visible by the active cobras
 #res=telescope.observeWithETS(tgt, 20, 300, "draining")
-res=telescope.observeWithNetflow(tgt, 4, 300.)
+res=telescope.observeWithNetflow(tgt, 21, 300.)
 print(res)
