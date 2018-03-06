@@ -1,0 +1,1 @@
+PYTHONPATH=../ics_cobraOps/python/:../ets_fiber_assigner:. python3 demo.py
