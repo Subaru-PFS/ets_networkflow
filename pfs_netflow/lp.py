@@ -33,33 +33,27 @@ def buildLPProblem(g, name="MinCostFlowTest", cat='Integer'):
 
     # add flow variables for target class to target arcs
     for tcid, tc in g.sciTargetClasses.items():
-        for tid, t in tc.targets.items():
-            addFlow(flows, "{}={}".format(tc.id, t.id), 0, 1)  # capacity of one
-
-    # add flow variables for target to target visits
-    for tid, t in g.sciTargets.items():
-        for visit in g.visits:
-            addFlow(flows, r"{}={}_v{}".format(t.id, t.id, visit), 0, 1)  # capacity of one
+        for arc in tc.outarcs:
+            if arc.endnode.id == "SINK":
+                addFlow(flows, arc.id, 0, 1e6)
+            else:
+                addFlow(flows, arc.id, 0, 1)  # capacity of one
+                # target to target visit arcs
+                for arc2 in arc.endnode.outarcs:
+                    if arc2.endnode.id == "SINK":
+                        addFlow(flows, arc2.id, 0, 1e6)
+                    else:
+                        addFlow(flows, arc2.id, 0, 1)  # capacity of one
 
     # add flow variables for target visit to cobra visit arcs
     for aid, a in g.arcs.items():
         if type(a) == dm.TargetVisitToCobraVisitArc:
-            addFlow(flows, "{}={}".format(a.startnode.id, a.endnode.id), 0, 1)
+            addFlow(flows, a.id, 0, 1)
 
     # add flow variables for cobra visit to cobra arcs
     for cid, c in g.cobras.items():
-        for visit in g.visits:
-            addFlow(flows, "{}_v{}={}".format(c.id, visit, c.id), 0, 1)
-
-    # add flow for overflow arc from targetClass node
-    # mF: evetually marry with loop above, keep separate for readibility now.
-    for tcid, tc in g.sciTargetClasses.items():
-        addFlow(flows, "{}=SINK".format(tcid), 0, 1e6)
-
-    # add flow for overflow arcs from science target nodes
-    # mF: evetually marry with loop above, keep separate for readibility now.
-    for tid, t in g.sciTargets.items():
-        addFlow(flows, "{}=SINK".format(tid), 0, 1e6)
+        for arc in c.inarcs:
+            addFlow(flows, arc.id, 0, 1)
 
     # Now add constraints: At every intermediate node, inflow (* gain) = outflow
     for tcid, tc in g.sciTargetClasses.items():
@@ -67,34 +61,33 @@ def buildLPProblem(g, name="MinCostFlowTest", cat='Integer'):
         # class, i.e. Ideally we get them all observed.
         # If it is sufficient to observe a subset (i.e. N out of M) then this needs to be modified.
         S = tc.supply
-        prob += pulp.lpSum([flows['{}={}'.format(a.startnode.id, a.endnode.id)] for a in tc.outarcs]) == S
+        prob += pulp.lpSum([flows[a.id] for a in tc.outarcs]) == S
 
     # target nodes
     for tid, t in g.sciTargets.items():
-        prob += pulp.lpSum( [ flows['{}={}'.format(a.startnode.id, a.endnode.id)] for a in t.inarcs]) * t.gain == \
-            pulp.lpSum([ flows['{}={}'.format(a.startnode.id, a.endnode.id)] for a in t.outarcs])
+        prob += pulp.lpSum( [ flows[a.id] for a in t.inarcs]) * t.gain == \
+            pulp.lpSum([ flows[a.id] for a in t.outarcs])
 
     # target visit nodes
     for tv in g.targetVisits.values():
-            prob += pulp.lpSum([flows['{}={}'.format(a.startnode.id, a.endnode.id)] for a in tv.inarcs]) == \
-                sum([flows['{}={}'.format(a.startnode.id, a.endnode.id)] for a in tv.outarcs])
+            prob += pulp.lpSum([flows[a.id] for a in tv.inarcs]) == \
+                sum([flows[a.id] for a in tv.outarcs])
 
     # cobra visit nodes
     for cvid, cv in g.cobraVisits.items():
-        prob += pulp.lpSum([flows['{}={}'.format(a.startnode.id, a.endnode.id)] for a in cv.inarcs]) == \
-            pulp.lpSum([flows['{}={}'.format(a.startnode.id, a.endnode.id)] for a in cv.outarcs])
+        prob += pulp.lpSum([flows[a.id] for a in cv.inarcs]) == \
+            pulp.lpSum([flows[a.id] for a in cv.outarcs])
 
     # for calibration targets
     INCLUDE_CALIB = True
     if INCLUDE_CALIB:
         # add flow variables for calib. target class to target arcs
         for tcid, tc in g.calTargetClasses.items():
-            for tid, t in tc.targets.items():
-                addFlow(flows, "{}={}".format(tc.id, t.id), 0, 1)  # capacity of one
-
-        # add flow for overflow arc from calib. targetClass node
-        for tcid, tc in g.calTargetClasses.items():
-            addFlow(flows, "{}=SINK".format(tcid), 0, 1e6)
+            for arc in tc.outarcs:
+                if arc.endnode.id == "SINK":
+                    addFlow(flows, arc.id, 0, 1e6)
+                else:
+                    addFlow(flows, arc.id, 0, 1)  # capacity of one
 
         # add flow for overflow arcs from calibb. target nodes
         #  mF: eventually marry with loop above, keep separate for readibility now.
@@ -107,12 +100,12 @@ def buildLPProblem(g, name="MinCostFlowTest", cat='Integer'):
             # class, i.e. Ideally we get them all observed.
             # If it is sufficient to observe a subset (i.e. N out of M) then this needs to be modified.
             S = tc.supply
-            prob += pulp.lpSum([flows['{}={}'.format(a.startnode.id, a.endnode.id)] for a in tc.outarcs]) == S
+            prob += pulp.lpSum([flows[a.id] for a in tc.outarcs]) == S
 
         # target nodes
         for tid, t in g.calTargets.items():
-            prob += pulp.lpSum([flows['{}={}'.format(a.startnode.id, a.endnode.id)] for a in t.inarcs]) * t.gain == \
-                pulp.lpSum([flows['{}={}'.format(a.startnode.id, a.endnode.id)] for a in t.outarcs])
+            prob += pulp.lpSum([flows[a.id] for a in t.inarcs]) * t.gain == \
+                pulp.lpSum([flows[a.id] for a in t.outarcs])
 
     print("Building cost equation ...")
     # attribute cost to the flows along the overflow arcs
@@ -143,18 +136,17 @@ def computeStats(g, flows, cost):
     NVISITS = len(g.visits)
 
     for t in g.sciTargets.values():
-        NSciObs += pulp.value(sum([flows['{}={}'.format(a.startnode.id, a.endnode.id)] for a in t.inarcs]))
-        NSciComplete += int(sum([pulp.value(flows['{}={}'.format(a.startnode.id, a.endnode.id)]) for a in t.outarcs]) == t.gain)
+        NSciObs += pulp.value(sum([flows[a.id] for a in t.inarcs]))
+        NSciComplete += int(sum([pulp.value(flows[a.id]) for a in t.outarcs]) == t.gain)
 
     Noverflow = 0
     for tcid, tc in g.sciTargetClasses.items():
-        Noverflow += \
-            pulp.value(flows['{}={}'.format(g.arcs["{}=SINK".format(tcid)].startnode.id, g.arcs["{}=SINK".format(tcid)].endnode.id)])
+        Noverflow += pulp.value(flows['{}=SINK'.format(tcid)])
 
     Ncobras_used = 0
     Ncobras_fully_used = 0
     for c in g.cobras.values():
-        v = pulp.value(sum([flows['{}={}'.format(a.startnode.id, a.endnode.id)] for a in c.inarcs]))
+        v = pulp.value(sum([flows[a.id] for a in c.inarcs]))
         Ncobras_used += int(v > 0)
         Ncobras_fully_used += int(v == NVISITS)
 
