@@ -2,7 +2,11 @@ import abc
 import numpy as np
 import pycconv
 import pyETS
-
+from collections import OrderedDict
+from pfs_netflow.survey_plan import buildSurveyPlan
+from pfs_netflow.lp import buildLPProblem, computeStats, solve
+import time
+import pulp
 
 class Cobra(object):
     def __init__ (self, ID, center, dotcenter, rdot, li, lo):
@@ -113,8 +117,89 @@ class Telescope(object):
             print(len(tgt))
         return res
 
-    def observeWithNetflow(self, tgt, nvisit):
+    def observeWithNetflow(self, tgt, nvisit, tvisit):
         tgt = self.select_visible_targets(tgt)
+        # build dictionaries
+        # supply_dict:
+        # - for all scientific targets: infinity
+        # - for all types of calibration targets: take number from class
+        # cost_dict:
+        # - scientific targets: get from object
+        # -
+        xcobras = OrderedDict()
+        for i,c in enumerate(self._Cobras):
+            xcobras["{:d}".format(i)] = [np.real(c.center), np.imag(c.center)]
+        print(xcobras)
+        targets = OrderedDict()
+        for i,t in enumerate(tgt):
+            targets[t.ID] = [np.real(t.position), np.imag(t.position)]
+        print(targets)
+
+        nreqvisit = []
+        for t in tgt:
+            if isinstance(t,ScienceTarget):
+                nreqvisit.append(int(t.obs_time/tvisit))
+            else:
+                nreqvisit.append(0)
+        print(nreqvisit)
+
+        # determine visibilities
+        pos = [t.position for t in tgt]
+        cbr = []
+        for c in self._Cobras:
+            cbr.append([c.center, c.innerLinkLength, c.outerLinkLength,
+                        c.dotcenter, c.rdot])
+        vis = pyETS.getVis(pos, cbr)
+
+        visibilities = OrderedDict()
+        for key, val in vis.items():
+            tid = tgt[key].ID
+            cc = [self._Cobras[c].ID for c in val]
+            visibilities[tid] = cc
+        print(visibilities)
+
+        class_dict = {}
+        cost_dict = {}
+        supply_dict = {}
+        for t in tgt:
+            if isinstance(t, ScienceTarget):
+                cls = "sci_P{}".format(t.priority)
+                class_dict[t.ID] = cls
+                supply_dict[cls] = np.inf
+                cost_dict[cls] = (t.nonObservationCost, t.partialObservationCost)
+            elif isinstance(t, CalibTarget):
+                cls = t.classname()
+                class_dict[t.ID] = cls
+                supply_dict[cls] = t.numRequired()
+                cost_dict[cls] = t.nonObservationCost
+            else:
+                raise TypeError
+        A = 0.
+        cost_dict['cobra_move'] = lambda d : d*A
+        print(class_dict)
+        print(supply_dict)
+        print(cost_dict)
+
+        g = buildSurveyPlan(xcobras, targets, nreqvisit, visibilities,
+                            class_dict, cost_dict, supply_dict, nvisit, 500.,
+                            [0., 0.])
+        print("Building LP problem ...")
+        start_time = time.time()
+        prob, flows, cost = buildLPProblem(g, cat='Integer')
+        #prob, flows, cost = buildLPProblem(g, cat='Continuous')
+        time_to_build = time.time() - start_time
+        print("Time to build model: {:.4e} s".format(time_to_build))
+        # Solve problem!
+        print("Solving LP problem ...")
+        start_time = time.time()
+
+
+        status = solve(prob) #, solver="GUROBI")
+
+
+        time_to_solve = time.time() - start_time
+        print("Solve status is [{}].".format( pulp.LpStatus[status] ))
+        print("Time to solve: {:.4e} s".format(time_to_solve))
 
 
 class Target(object):
@@ -160,11 +245,18 @@ class ScienceTarget(Target):
 
     @property
     def nonObservationCost(self):
-        return self._non_obs_ost
+        if self._pri==1:
+            return 1000.
+        elif self._pri==2:
+            return 100.
+        elif self._pri==3:
+            return 10.
+        else:
+            return 1.
 
     @property
     def partialObservationCost(self):
-        return self._partial_obs_cost
+        return 1e9
 
     @property
     def obs_time(self):
@@ -183,13 +275,24 @@ class CalibTarget(Target):
 
 
 class SkyCalibTarget(CalibTarget):
-# must implement numRequired()
-    pass
+    nonObservationCost = 10000.
 
+    @staticmethod
+    def numRequired():
+        return 1
+    @staticmethod
+    def classname():
+        return "sky_P1"
 
 class StarCalibTarget(CalibTarget):
-# must implement numRequired()
-    pass
+    nonObservationCost = 10000.
+
+    @staticmethod
+    def numRequired():
+        return 1
+    @staticmethod
+    def classname():
+        return "cal_P1"
 
 # ... maybe other calibration classes
 
@@ -236,7 +339,7 @@ def getFocalPlane():
     cobras = pyETS.getAllCobras()
     res = []
     for i in range(len(cobras)):
-        ID = "C{}".format(i)
+        ID = "{}".format(i)
         res.append(Cobra(ID, cobras[i][0], cobras[i][3], cobras[i][4],
                          cobras[i][1], cobras[i][2]))
     return res
@@ -248,8 +351,8 @@ fcal_stars       = catalog_path+"/pfs_preliminary_target_cosmology_fcstars.dat"
 fsky_pos         = catalog_path+"/pfs_preliminary_target_cosmology_sky.dat"
 
 tgt = readScientificFromFile(fscience_targets)
-#tgt += readCalibrationFromFile(fcal_stars, StarCalibTarget)
-#tgt += readCalibrationFromFile(fsky_pos, SkyCalibTarget)
+tgt += readCalibrationFromFile(fcal_stars, StarCalibTarget)
+tgt += readCalibrationFromFile(fsky_pos, SkyCalibTarget)
 
 cobras = getFocalPlane()
 
@@ -259,10 +362,10 @@ cobras = [c for c in cobras if abs(c.center) < 20]
 # point the telescope at the center of all science targets
 raTel, decTel = telescopeRaDecFromFile(fscience_targets)
 posang = 0.
-time = "2016-04-03T08:00:00Z"
-telescope = Telescope(cobras, 1., raTel, decTel, posang, time)
+otime = "2016-04-03T08:00:00Z"
+telescope = Telescope(cobras, 1., raTel, decTel, posang, otime)
 
 # select only targets that are visible by the active cobras
-res=telescope.observeWithETS(tgt, 20, 300, "draining")
-#res=telescope.observeWithNetflow(tgt, 1)
+#res=telescope.observeWithETS(tgt, 20, 300, "draining")
+res=telescope.observeWithNetflow(tgt, 4, 300.)
 print(res)
