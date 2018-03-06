@@ -44,6 +44,5 @@ posang = 0.
 otime = "2016-04-03T08:00:00Z"
 telescope = dm.Telescope(cobras, 1., raTel, decTel, posang, otime)
 
-#res=telescope.observeWithETS(tgt, 20, 300, "draining")
 res=telescope.observeWithNetflow(tgt, 21, 300.)
 print(res)
