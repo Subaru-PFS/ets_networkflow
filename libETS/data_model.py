@@ -307,3 +307,51 @@ class CalibTarget(Target):
     def numRequired():
         """ returns the required number of targets for this target class"""
         pass
+
+def telescopeRaDecFromFile(file):
+    with open(file) as f:
+        ras=[]
+        decs=[]
+        ll=f.readlines()
+        for l in ll[1:]:
+            if not l.startswith("#"):
+                tt = l.split()
+                ra,dec = (float(tt[1]), float(tt[2]))
+                ras.append(ra)
+                decs.append(dec)
+    return float(np.average(ras)), float(np.average(decs))
+
+
+def readScientificFromFile(file):
+    with open(file) as f:
+        res = []
+        ll=f.readlines()
+        for l in ll[1:]:
+            if not l.startswith("#"):
+                tt = l.split()
+                id_,ra,dec,tm,pri = (str(tt[0]), float(tt[1]), float(tt[2]),
+                                     float(tt[3]), int(tt[4]))
+                res.append(ScienceTarget(id_, ra, dec, tm, pri))
+    return res
+
+
+def readCalibrationFromFile(file, cls):
+    with open(file) as f:
+        res = []
+        ll=f.readlines()
+        for l in ll[1:]:
+            if not l.startswith("#"):
+                tt = l.split()
+                id_,ra,dec = (str(tt[0]), float(tt[1]), float(tt[2]))
+                res.append(cls(id_, ra, dec))
+    return res
+
+
+def getFullFocalPlane():
+    cobras = pyETS.getAllCobras()
+    res = []
+    for i in range(len(cobras)):
+        ID = "{}".format(i)
+        res.append(Cobra(ID, cobras[i][0], cobras[i][3], cobras[i][4],
+                         cobras[i][1], cobras[i][2]))
+    return res
