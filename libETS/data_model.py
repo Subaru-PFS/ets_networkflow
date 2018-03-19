@@ -12,7 +12,13 @@ import pfs_netflow.datamodel as dm
 
 
 class Cobra(object):
-    def __init__ (self, ID, center, dotcenter, rdot, li, lo):
+    """An object holding all relevant information describing a single Cobra
+    positioner.
+    This includes center position, black dot position, black dot radius, and
+    inner and outer link lengths.
+    All lengths in mm, positions are stored as complex numbers.
+    """
+    def __init__(self, ID, center, dotcenter, rdot, li, lo):
         self._ID = str(ID)
         self._center = complex(center)
         self._dotcenter = complex(dotcenter)
@@ -52,6 +58,14 @@ class Cobra(object):
 
 
 class Telescope(object):
+    """An object describing a telescope configuration to be used for observing
+    a target field. Includes a list of Cobras, telescope RA/Dec and position
+    angle and an observation time according to ISO8601 UTC.
+    The minimum allowed distance between two Cobra tips is also stored here.
+    Based on this information, and given a list of targets, this object can
+    compute assignment strategies using different algorithms (currently network
+    flow and ETs approaches).
+    """
     def __init__(self, Cobras, collisionRadius, ra, dec, posang, time):
         self._Cobras = tuple(Cobras)
         self._cobraCollisionRadius = float(collisionRadius)
@@ -129,16 +143,16 @@ class Telescope(object):
         # - scientific targets: get from object
         # -
         xcobras = OrderedDict()
-        for i,c in enumerate(self._Cobras):
+        for i, c in enumerate(self._Cobras):
             xcobras[c.ID] = [np.real(c.center), np.imag(c.center)]
 
         targets = OrderedDict()
-        for i,t in enumerate(tgt):
+        for i, t in enumerate(tgt):
             targets[t.ID] = [np.real(t.position), np.imag(t.position)]
 
         nreqvisit = []
         for t in tgt:
-            if isinstance(t,ScienceTarget):
+            if isinstance(t, ScienceTarget):
                 nreqvisit.append(int(t.obs_time/tvisit))
             else:
                 nreqvisit.append(0)
@@ -165,7 +179,8 @@ class Telescope(object):
                 cls = "sci_P{}".format(t.priority)
                 class_dict[t.ID] = cls
                 supply_dict[cls] = np.inf
-                cost_dict[cls] = (t.nonObservationCost, t.partialObservationCost)
+                cost_dict[cls] = (t.nonObservationCost,
+                                  t.partialObservationCost)
             elif isinstance(t, CalibTarget):
                 cls = t.classname()
                 class_dict[t.ID] = cls
@@ -174,7 +189,7 @@ class Telescope(object):
             else:
                 raise TypeError
         A = 0.
-        cost_dict['cobra_move'] = lambda d : d*A
+        cost_dict['cobra_move'] = lambda d: d*A
 
         g = buildSurveyPlan(xcobras, targets, nreqvisit, visibilities,
                             class_dict, cost_dict, supply_dict, nvisit, 500.,
@@ -182,18 +197,18 @@ class Telescope(object):
         print("Building LP problem ...")
         start_time = time.time()
         prob, flows, cost = buildLPProblem(g, cat='Integer')
-        #prob, flows, cost = buildLPProblem(g, cat='Continuous')
+        # prob, flows, cost = buildLPProblem(g, cat='Continuous')
         time_to_build = time.time() - start_time
         print("Time to build model: {:.4e} s".format(time_to_build))
         # Solve problem!
         print("Solving LP problem ...")
         start_time = time.time()
 
+        status = solve(prob, maxSeconds=100)  # , solver="GUROBI")
 
-        status = solve(prob, maxSeconds=100) #, solver="GUROBI")
-        def setflows(g,flows):
+        def setflows(g, flows):
             for a in g.arcs.values():
-                k = '{}={}'.format(a.startnode.id,a.endnode.id)
+                k = '{}={}'.format(a.startnode.id, a.endnode.id)
                 if k in flows:
                     a.flow = pulp.value(flows[k])
         setflows(g, flows)
@@ -218,7 +233,7 @@ class Telescope(object):
                     res[visit][targetID] = cobraID
 
         time_to_solve = time.time() - start_time
-        print("Solve status is [{}].".format( pulp.LpStatus[status] ))
+        print("Solve status is [{}].".format(pulp.LpStatus[status]))
         print("Time to solve: {:.4e} s".format(time_to_solve))
 
         stats = computeStats(g, flows, cost)
@@ -227,15 +242,20 @@ class Telescope(object):
         for t in tgt:
             if isinstance(t, ScienceTarget):
                 NSciTargets += 1
-        print("{} = {}".format('Value of cost function',pulp.value(stats.cost) ) )
-        print("[{}] out of {} science targets get observed.".format(int(stats.NSciObs),NSciTargets))
+        print("{} = {}".format('Value of cost function', pulp.value(stats.cost)))
+        print("[{}] out of {} science targets get observed.".format(int(stats.NSciObs), NSciTargets))
         print("For {} out of these all required exposures got allocated.".format(stats.NSciComplete))
         print("{} targets get sent down the overflow arc.".format(stats.Noverflow))
-        print("{} out of {} cobras observed a target in one or more exposures.".format(stats.Ncobras_used, len(self._Cobras) ))
+        print("{} out of {} cobras observed a target in one or more exposures.".format(stats.Ncobras_used, len(self._Cobras)))
         print("{} cobras observed a target in all exposures.".format(stats.Ncobras_fully_used))
         return res
 
+
 class Target(object):
+    """Base class for all target types observable with PFS. All targets are
+    initialized with RA/Dec and an ID string. From RA/Dec, the target can
+    determine its position on the focal plane, once also the telescope attitude
+    is known. """
     def __init__(self, ID, ra, dec):
         self._ID = str(ID)
         self._ra = float(ra)
@@ -257,7 +277,7 @@ class Target(object):
 
     def calc_position(self, raTel, decTel, posang, time):
         self._position = pycconv.cconv([self._ra], [self._dec],
-                                       raTel,decTel,posang,time)[0]
+                                       raTel, decTel, posang, time)[0]
 
     @property
     def position(self):
@@ -266,6 +286,11 @@ class Target(object):
 
 
 class ScienceTarget(Target):
+    """Derived from the Target class, with the additional attributes priority
+    and observation time.
+
+    All different types of ScienceTarget need to be derived from this class."
+    """
     def __init__(self, ID, ra, dec, obs_time, pri):
         super(ScienceTarget, self).__init__(ID, ra, dec)
         self._obs_time = float(obs_time)
@@ -278,11 +303,11 @@ class ScienceTarget(Target):
 
     @property
     def nonObservationCost(self):
-        if self._pri==1:
+        if self._pri == 1:
             return 1000.
-        elif self._pri==2:
+        elif self._pri == 2:
             return 100.
-        elif self._pri==3:
+        elif self._pri == 3:
             return 10.
         else:
             return 1.
@@ -301,22 +326,24 @@ class ScienceTarget(Target):
 
 
 class CalibTarget(Target):
-    """ needs to define a class variable called 'nonObservationCost'
+    """Derived from the Target class.
+    Needs to define a class variable called 'nonObservationCost'
     and a property called 'classname'"""
     @abc.abstractmethod
     def numRequired():
-        """ returns the required number of targets for this target class"""
+        """returns the required number of targets for this target class"""
         pass
+
 
 def telescopeRaDecFromFile(file):
     with open(file) as f:
-        ras=[]
-        decs=[]
-        ll=f.readlines()
+        ras = []
+        decs = []
+        ll = f.readlines()
         for l in ll[1:]:
             if not l.startswith("#"):
                 tt = l.split()
-                ra,dec = (float(tt[1]), float(tt[2]))
+                ra, dec = (float(tt[1]), float(tt[2]))
                 ras.append(ra)
                 decs.append(dec)
     return float(np.average(ras)), float(np.average(decs))
@@ -325,12 +352,13 @@ def telescopeRaDecFromFile(file):
 def readScientificFromFile(file):
     with open(file) as f:
         res = []
-        ll=f.readlines()
+        ll = f.readlines()
         for l in ll[1:]:
             if not l.startswith("#"):
                 tt = l.split()
-                id_,ra,dec,tm,pri = (str(tt[0]), float(tt[1]), float(tt[2]),
-                                     float(tt[3]), int(tt[4]))
+                id_, ra, dec, tm, pri = (
+                    str(tt[0]), float(tt[1]), float(tt[2]),
+                    float(tt[3]), int(tt[4]))
                 res.append(ScienceTarget(id_, ra, dec, tm, pri))
     return res
 
@@ -338,11 +366,11 @@ def readScientificFromFile(file):
 def readCalibrationFromFile(file, cls):
     with open(file) as f:
         res = []
-        ll=f.readlines()
+        ll = f.readlines()
         for l in ll[1:]:
             if not l.startswith("#"):
                 tt = l.split()
-                id_,ra,dec = (str(tt[0]), float(tt[1]), float(tt[2]))
+                id_, ra, dec = (str(tt[0]), float(tt[1]), float(tt[2]))
                 res.append(cls(id_, ra, dec))
     return res
 
