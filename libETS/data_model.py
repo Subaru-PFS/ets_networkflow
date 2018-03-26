@@ -2,24 +2,21 @@ import abc
 import numpy as np
 import pycconv
 import pyETS
-from collections import OrderedDict
-from pfs_netflow.survey_plan import buildSurveyPlan
-from pfs_netflow.lp import buildLPProblem, computeStats, solve
+from collections import OrderedDict, defaultdict
 import time
 import pulp
-from pfs_netflow.plotting import plotSurveyPlan, plotFocalPlane
-import pfs_netflow.datamodel as dm
-from collections import defaultdict
 
 def build_network(cobras, targets, nvisits, tvisit):
     Cv_i = defaultdict(list)  # Cobra visit inflows
     Tv_o = defaultdict(list)  # Target visit outflows
-    Tv_i = defaultdict(list)  # Target visit outflows
-    T_o = defaultdict(list)  # Target visit outflows
-    T_i = defaultdict(list)  # Target visit outflows
-    CTCv_o = defaultdict(list)  # Target visit outflows
-    STC_o = defaultdict(list)  # Target visit outflows
+    Tv_i = defaultdict(list)  # Target visit inflows
+    T_o = defaultdict(list)  # Target outflows (only science targets)
+    T_i = defaultdict(list)  # Target inflows (only science targets)
+    CTCv_o = defaultdict(list)  # Calibration Target visit outflows
+    STC_o = defaultdict(list)  # Science Target outflows
     prob = pulp.LpProblem("problem", pulp.LpMinimize)
+    cost = pulp.LpVariable("cost", 0)
+    #cost = 0.
 
     nreqvisit = []
     for t in targets:
@@ -35,28 +32,41 @@ def build_network(cobras, targets, nvisits, tvisit):
 
     vis = pyETS.getVis(pos, cbr)
 
-    vis = [vis for _ in range(nvisits)]  # just replicate for now
-    for tidx, val in vis[0].items():
-        tgt = targets[tidx]
-        if isinstance(tgt, ScienceTarget):
-            for i in range(nvisits):
-                f = pulp.LpVariable("T{}_Tv{}_v{}".format(tidx, tidx, i), 0, 1, cat=pulp.LpInteger)
-                T_o[tidx].append(f)
-                Tv_i[(tidx,i)].append(f)
-            f = pulp.LpVariable("STC{}_T{}".format(tidx, tidx), 0, 1, cat=pulp.LpInteger)
-            T_i[tidx].append(f)
-            STC_o[type(tgt)].append(f)
-        elif isinstance(tgt, CalibTarget):
-            for i in range(nvisits):
-                f = pulp.LpVariable("CTCv{}_Tv{}_v{}".format(tidx, tidx, i), 0, 1, cat=pulp.LpInteger)
-                Tv_i[(tidx,i)].append(f)
-                CTCv_o[(type(tgt),i)].append(f)
-        for cidx in val:
-            for i in range(nvisits):
-                f = pulp.LpVariable("Tv{}_Cv{}_v{}".format(tidx, cidx, i), 0, 1, cat=pulp.LpInteger)
-                Cv_i[(cidx,i)].append(f)
-                Tv_o[(tidx,i)].append(f)
+    def newvar(lo, hi):
+        newvar._varcount+=1
+        print("var",newvar._varcount)
+        return pulp.LpVariable("v{}".format(newvar._varcount), lo, hi, cat=pulp.LpInteger)
+    newvar._varcount = 0
 
+    vis = [vis for _ in range(nvisits)]  # just replicate for now
+    for ivis in range(nvisits):
+        for tidx, val in vis[ivis].items():
+            tgt = targets[tidx]
+            if isinstance(tgt, ScienceTarget):
+                f = newvar(0,1)#pulp.LpVariable("T{}_Tv{}_v{}".format(tidx, tidx, ivis), 0, 1, cat=pulp.LpInteger)
+                T_o[tidx].append(f)
+                Tv_i[(tidx,ivis)].append(f)
+                if len(T_o[tidx])==1:  # freshly created
+                    f = newvar(0,1)#pulp.LpVariable("STC{}_T{}".format(tidx, tidx), 0, 1, cat=pulp.LpInteger)
+                    T_i[tidx].append(f)
+                    STC_o[type(tgt)].append(f)
+                    if len(STC_o[type(tgt)])==1:  # freshly created
+                        f = newvar(0,None)#pulp.LpVariable("STC{}_SINK".format(tidx), 0, None, cat=pulp.LpInteger)
+                        STC_o[type(tgt)].append(f)
+                        cost += f*tgt.nonObservationCost
+                    f = newvar(0,None)#pulp.LpVariable("T{}_SINK".format(tidx), 0, None, cat=pulp.LpInteger)
+                    T_o[tidx].append(f)
+                    cost += f*tgt.partialObservationCost
+            elif isinstance(tgt, CalibTarget):
+                f = newvar(0,1)#pulp.LpVariable("CTCv{}_Tv{}_v{}".format(tidx, tidx, ivis), 0, 1, cat=pulp.LpInteger)
+                Tv_i[(tidx,ivis)].append(f)
+                CTCv_o[(type(tgt),ivis)].append(f)
+            for cidx in val:
+                f = newvar(0,1)#pulp.LpVariable("Tv{}_Cv{}_v{}".format(tidx, cidx, ivis), 0, 1, cat=pulp.LpInteger)
+                Cv_i[(cidx,ivis)].append(f)
+                Tv_o[(tidx,ivis)].append((f, cidx))
+
+    prob += cost
     # every Cobra can observe at most one target per visit
     for inflow in Cv_i.values():
         prob += pulp.lpSum([f for f in inflow]) <= 1
@@ -69,7 +79,7 @@ def build_network(cobras, targets, nvisits, tvisit):
     # inflow and outflow at every Tv node must be balanced
     for key, ival in Tv_i.items():
         oval = Tv_o[key]
-        prob += pulp.lpSum([v for v in ival]+[-v for v in oval]) == 0
+        prob += pulp.lpSum([v for v in ival]+[-v[0] for v in oval]) == 0
 
     # inflow and outflow at every T node must be balanced
     for key, ival in T_i.items():
@@ -77,7 +87,23 @@ def build_network(cobras, targets, nvisits, tvisit):
         nvisits = nreqvisit[key]
         prob += pulp.lpSum([nvisits*v for v in ival]+[-v for v in oval]) == 0
 
-    print(prob)
+    # Science targets must be either observed or go to the sink
+    for key, val in STC_o.items():
+        prob += pulp.lpSum([v for v in val]) == 1000000
+
+    #print(prob)
+    status = prob.solve(pulp.COIN_CMD(msg=1, keepFiles=0,
+                                      maxSeconds=1000,
+                                          threads=2, dual=10.))
+    for k1, v1 in Tv_o.items():
+        for i2 in v1:
+            visited = pulp.value(i2[0]) > 0
+            if visited:
+                tidx, ivis = k1
+                cidx = i2[1]
+                print("visit:{} tgt {} observed by cobra {}".format(ivis, tidx, cidx))
+    #print(prob)
+    exit()
 
 class Cobra(object):
     """An object holding all relevant information describing a single Cobra
@@ -202,122 +228,10 @@ class Telescope(object):
         return res
 
     def observeWithNetflow(self, tgt, nvisit, tvisit):
-        tgt = self.select_visible_targets(tgt)
+        for t in tgt:
+            t.calc_position(self._ra, self._dec, self._posang, self._time)
+        #tgt = self.select_visible_targets(tgt)
         build_network (self._Cobras, tgt, nvisit, tvisit)
-        # build dictionaries
-        # supply_dict:
-        # - for all scientific targets: infinity
-        # - for all types of calibration targets: take number from class
-        # cost_dict:
-        # - scientific targets: get from object
-        # -
-        xcobras = OrderedDict()
-        for i, c in enumerate(self._Cobras):
-            xcobras[c.ID] = [np.real(c.center), np.imag(c.center)]
-
-        targets = OrderedDict()
-        for i, t in enumerate(tgt):
-            targets[t.ID] = [np.real(t.position), np.imag(t.position)]
-
-        nreqvisit = []
-        for t in tgt:
-            if isinstance(t, ScienceTarget):
-                nreqvisit.append(int(t.obs_time/tvisit))
-            else:
-                nreqvisit.append(0)
-
-        # determine visibilities
-        pos = [t.position for t in tgt]
-        cbr = []
-        for c in self._Cobras:
-            cbr.append([c.center, c.innerLinkLength, c.outerLinkLength,
-                        c.dotcenter, c.rdot])
-        vis = pyETS.getVis(pos, cbr)
-
-        visibilities = OrderedDict()
-        for key, val in vis.items():
-            tid = tgt[key].ID
-            cc = [self._Cobras[c].ID for c in val]
-            visibilities[tid] = cc
-
-        class_dict = {}
-        cost_dict = {}
-        supply_dict = {}
-        for t in tgt:
-            if isinstance(t, ScienceTarget):
-                cls = "sci_P{}".format(t.priority)
-                class_dict[t.ID] = cls
-                supply_dict[cls] = np.inf
-                cost_dict[cls] = (t.nonObservationCost,
-                                  t.partialObservationCost)
-            elif isinstance(t, CalibTarget):
-                cls = t.classname()
-                class_dict[t.ID] = cls
-                supply_dict[cls] = t.numRequired()
-                cost_dict[cls] = t.nonObservationCost
-            else:
-                raise TypeError
-        A = 0.
-        cost_dict['cobra_move'] = lambda d: d*A
-
-        g = buildSurveyPlan(xcobras, targets, nreqvisit, visibilities,
-                            class_dict, cost_dict, supply_dict, nvisit, 500.,
-                            [0., 0.])
-        print("Building LP problem ...")
-        start_time = time.time()
-        prob, flows, cost = buildLPProblem(g, cat='Integer')
-        # prob, flows, cost = buildLPProblem(g, cat='Continuous')
-        time_to_build = time.time() - start_time
-        print("Time to build model: {:.4e} s".format(time_to_build))
-        # Solve problem!
-        print("Solving LP problem ...")
-        start_time = time.time()
-
-        status = solve(prob, maxSeconds=100)  # , solver="GUROBI")
-
-        def setflows(g, flows):
-            for a in g.arcs.values():
-                k = '{}={}'.format(a.startnode.id, a.endnode.id)
-                if k in flows:
-                    a.flow = pulp.value(flows[k])
-        setflows(g, flows)
-
-        res = []
-        for i in range(nvisit):
-            res.append({})
-        for a in g.arcs.values():
-            n1, n2 = a.startnode, a.endnode
-            if a.flow > 0.01:
-                if type(n2) == dm.CobraVisit and type(n1) == dm.TargetVisit:
-                    visit = n2.visit
-                    cobraID = n2.cobra.id[2:]
-                    targetID = n1.target.id[2:]
-                    res[visit][targetID] = cobraID
-                elif type(n2) == dm.CobraVisit and type(n1) == dm.CalTarget:
-                    visit = n2.visit
-                    cobraID = n2.cobra.id
-                    cobraID = cobraID[2:]
-                    vstr = "_v{}".format(visit)
-                    targetID = n1.id[2:-len(vstr)]
-                    res[visit][targetID] = cobraID
-
-        time_to_solve = time.time() - start_time
-        print("Solve status is [{}].".format(pulp.LpStatus[status]))
-        print("Time to solve: {:.4e} s".format(time_to_solve))
-
-        stats = computeStats(g, flows, cost)
-
-        NSciTargets = 0
-        for t in tgt:
-            if isinstance(t, ScienceTarget):
-                NSciTargets += 1
-        print("{} = {}".format('Value of cost function', pulp.value(stats.cost)))
-        print("[{}] out of {} science targets get observed.".format(int(stats.NSciObs), NSciTargets))
-        print("For {} out of these all required exposures got allocated.".format(stats.NSciComplete))
-        print("{} targets get sent down the overflow arc.".format(stats.Noverflow))
-        print("{} out of {} cobras observed a target in one or more exposures.".format(stats.Ncobras_used, len(self._Cobras)))
-        print("{} cobras observed a target in all exposures.".format(stats.Ncobras_fully_used))
-        return res
 
 
 class Target(object):

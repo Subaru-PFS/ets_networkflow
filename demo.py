@@ -42,7 +42,7 @@ tgt += dm.readCalibrationFromFile(fsky_pos, SkyCalibTarget)
 cobras = dm.getFullFocalPlane()
 
 # build reduced Cobra list to speed up calculation
-cobras = [c for c in cobras if abs(c.center) < 20]
+cobras = [c for c in cobras if abs(c.center) < 200]
 
 # point the telescope at the center of all science targets
 raTel, decTel = dm.telescopeRaDecFromFile(fscience_targets)
@@ -50,5 +50,5 @@ posang = 0.
 otime = "2016-04-03T08:00:00Z"
 telescope = dm.Telescope(cobras, 1., raTel, decTel, posang, otime)
 
-res=telescope.observeWithNetflow(tgt, 21, 300.)
-print(res)
+res=telescope.observeWithNetflow(tgt, 9, 300.)
+#print(res)
