@@ -9,7 +9,75 @@ import time
 import pulp
 from pfs_netflow.plotting import plotSurveyPlan, plotFocalPlane
 import pfs_netflow.datamodel as dm
+from collections import defaultdict
 
+def build_network(cobras, targets, nvisits, tvisit):
+    Cv_i = defaultdict(list)  # Cobra visit inflows
+    Tv_o = defaultdict(list)  # Target visit outflows
+    Tv_i = defaultdict(list)  # Target visit outflows
+    T_o = defaultdict(list)  # Target visit outflows
+    T_i = defaultdict(list)  # Target visit outflows
+    CTCv_o = defaultdict(list)  # Target visit outflows
+    STC_o = defaultdict(list)  # Target visit outflows
+    prob = pulp.LpProblem("problem", pulp.LpMinimize)
+
+    nreqvisit = []
+    for t in targets:
+        if isinstance(t, ScienceTarget):
+            nreqvisit.append(int(t.obs_time/tvisit))
+        else:
+            nreqvisit.append(0)
+
+    # determine visibilities
+    pos = [t.position for t in targets]
+    cbr = [[c.center, c.innerLinkLength, c.outerLinkLength,
+                    c.dotcenter, c.rdot] for c in cobras]
+
+    vis = pyETS.getVis(pos, cbr)
+
+    vis = [vis for _ in range(nvisits)]  # just replicate for now
+    for tidx, val in vis[0].items():
+        tgt = targets[tidx]
+        if isinstance(tgt, ScienceTarget):
+            for i in range(nvisits):
+                f = pulp.LpVariable("T{}_Tv{}_v{}".format(tidx, tidx, i), 0, 1, cat=pulp.LpInteger)
+                T_o[tidx].append(f)
+                Tv_i[(tidx,i)].append(f)
+            f = pulp.LpVariable("STC{}_T{}".format(tidx, tidx), 0, 1, cat=pulp.LpInteger)
+            T_i[tidx].append(f)
+            STC_o[type(tgt)].append(f)
+        elif isinstance(tgt, CalibTarget):
+            for i in range(nvisits):
+                f = pulp.LpVariable("CTCv{}_Tv{}_v{}".format(tidx, tidx, i), 0, 1, cat=pulp.LpInteger)
+                Tv_i[(tidx,i)].append(f)
+                CTCv_o[(type(tgt),i)].append(f)
+        for cidx in val:
+            for i in range(nvisits):
+                f = pulp.LpVariable("Tv{}_Cv{}_v{}".format(tidx, cidx, i), 0, 1, cat=pulp.LpInteger)
+                Cv_i[(cidx,i)].append(f)
+                Tv_o[(tidx,i)].append(f)
+
+    # every Cobra can observe at most one target per visit
+    for inflow in Cv_i.values():
+        prob += pulp.lpSum([f for f in inflow]) <= 1
+
+    # every calibration target class must be observed a minimum number of times
+    # every visit
+    for key, value in CTCv_o.items():
+        prob += pulp.lpSum([v for v in value]) >= key[0].numRequired()
+
+    # inflow and outflow at every Tv node must be balanced
+    for key, ival in Tv_i.items():
+        oval = Tv_o[key]
+        prob += pulp.lpSum([v for v in ival]+[-v for v in oval]) == 0
+
+    # inflow and outflow at every T node must be balanced
+    for key, ival in T_i.items():
+        oval = T_o[key]
+        nvisits = nreqvisit[key]
+        prob += pulp.lpSum([nvisits*v for v in ival]+[-v for v in oval]) == 0
+
+    print(prob)
 
 class Cobra(object):
     """An object holding all relevant information describing a single Cobra
@@ -135,6 +203,7 @@ class Telescope(object):
 
     def observeWithNetflow(self, tgt, nvisit, tvisit):
         tgt = self.select_visible_targets(tgt)
+        build_network (self._Cobras, tgt, nvisit, tvisit)
         # build dictionaries
         # supply_dict:
         # - for all scientific targets: infinity
