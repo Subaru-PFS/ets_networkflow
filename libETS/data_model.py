@@ -6,6 +6,7 @@ from collections import OrderedDict, defaultdict
 import time
 import pulp
 
+
 def build_network(cobras, targets, nvisits, tvisit):
     Cv_i = defaultdict(list)  # Cobra visit inflows
     Tv_o = defaultdict(list)  # Target visit outflows
@@ -16,7 +17,6 @@ def build_network(cobras, targets, nvisits, tvisit):
     STC_o = defaultdict(list)  # Science Target outflows
     prob = pulp.LpProblem("problem", pulp.LpMinimize)
     cost = pulp.LpVariable("cost", 0)
-    #cost = 0.
 
     nreqvisit = []
     for t in targets:
@@ -27,46 +27,58 @@ def build_network(cobras, targets, nvisits, tvisit):
 
     # determine visibilities
     pos = [t.position for t in targets]
-    cbr = [[c.center, c.innerLinkLength, c.outerLinkLength,
-                    c.dotcenter, c.rdot] for c in cobras]
+    cbr = [[c.center, c.innerLinkLength, c.outerLinkLength, c.dotcenter,
+            c.rdot] for c in cobras]
 
     vis = pyETS.getVis(pos, cbr)
 
     def newvar(lo, hi):
-        newvar._varcount+=1
-        print("var",newvar._varcount)
-        return pulp.LpVariable("v{}".format(newvar._varcount), lo, hi, cat=pulp.LpInteger)
+        newvar._varcount += 1
+        return pulp.LpVariable("v{}".format(newvar._varcount), lo, hi,
+                               cat=pulp.LpInteger)
     newvar._varcount = 0
 
     vis = [vis for _ in range(nvisits)]  # just replicate for now
+
+    # define LP variables
     for ivis in range(nvisits):
         for tidx, val in vis[ivis].items():
             tgt = targets[tidx]
             if isinstance(tgt, ScienceTarget):
-                f = newvar(0,1)#pulp.LpVariable("T{}_Tv{}_v{}".format(tidx, tidx, ivis), 0, 1, cat=pulp.LpInteger)
+                # Target node to target visit node
+                f = newvar(0, 1)
                 T_o[tidx].append(f)
-                Tv_i[(tidx,ivis)].append(f)
-                if len(T_o[tidx])==1:  # freshly created
-                    f = newvar(0,1)#pulp.LpVariable("STC{}_T{}".format(tidx, tidx), 0, 1, cat=pulp.LpInteger)
+                Tv_i[(tidx, ivis)].append(f)
+                if len(T_o[tidx]) == 1:  # freshly created
+                    # Science Target class node to target node
+                    f = newvar(0, 1)
                     T_i[tidx].append(f)
                     STC_o[type(tgt)].append(f)
-                    if len(STC_o[type(tgt)])==1:  # freshly created
-                        f = newvar(0,None)#pulp.LpVariable("STC{}_SINK".format(tidx), 0, None, cat=pulp.LpInteger)
+                    if len(STC_o[type(tgt)]) == 1:  # freshly created
+                        # Science Target class node to sink
+                        f = newvar(0, None)
                         STC_o[type(tgt)].append(f)
                         cost += f*tgt.nonObservationCost
-                    f = newvar(0,None)#pulp.LpVariable("T{}_SINK".format(tidx), 0, None, cat=pulp.LpInteger)
+                    # Science Target node to sink
+                    f = newvar(0, None)
                     T_o[tidx].append(f)
                     cost += f*tgt.partialObservationCost
             elif isinstance(tgt, CalibTarget):
-                f = newvar(0,1)#pulp.LpVariable("CTCv{}_Tv{}_v{}".format(tidx, tidx, ivis), 0, 1, cat=pulp.LpInteger)
-                Tv_i[(tidx,ivis)].append(f)
-                CTCv_o[(type(tgt),ivis)].append(f)
+                # Calibration Target class node to target visit node
+                f = newvar(0, 1)
+                Tv_i[(tidx, ivis)].append(f)
+                CTCv_o[(type(tgt), ivis)].append(f)
             for cidx in val:
-                f = newvar(0,1)#pulp.LpVariable("Tv{}_Cv{}_v{}".format(tidx, cidx, ivis), 0, 1, cat=pulp.LpInteger)
-                Cv_i[(cidx,ivis)].append(f)
-                Tv_o[(tidx,ivis)].append((f, cidx))
+                # target visit node to cobra visit node
+                f = newvar(0, 1)
+                Cv_i[(cidx, ivis)].append(f)
+                Tv_o[(tidx, ivis)].append((f, cidx))
 
+    # Cost function
     prob += cost
+
+    # Constraints
+
     # every Cobra can observe at most one target per visit
     for inflow in Cv_i.values():
         prob += pulp.lpSum([f for f in inflow]) <= 1
@@ -89,21 +101,22 @@ def build_network(cobras, targets, nvisits, tvisit):
 
     # Science targets must be either observed or go to the sink
     for key, val in STC_o.items():
-        prob += pulp.lpSum([v for v in val]) == 1000000
+        prob += pulp.lpSum([v for v in val]) == len(val)-1
 
-    #print(prob)
-    status = prob.solve(pulp.COIN_CMD(msg=1, keepFiles=0,
-                                      maxSeconds=1000,
-                                          threads=2, dual=10.))
+    status = prob.solve(pulp.COIN_CMD(msg=1, keepFiles=0, maxSeconds=1000,
+                                      threads=1, dual=10.))
+
+    res = [{} for _ in range(nvisits)]
     for k1, v1 in Tv_o.items():
         for i2 in v1:
             visited = pulp.value(i2[0]) > 0
             if visited:
                 tidx, ivis = k1
                 cidx = i2[1]
-                print("visit:{} tgt {} observed by cobra {}".format(ivis, tidx, cidx))
-    #print(prob)
-    exit()
+                res[ivis][targets[tidx].ID] = cobras[cidx].ID
+                # print("visit:{} tgt {} observed by cobra {}".format(ivis, tidx, cidx))
+    return res
+
 
 class Cobra(object):
     """An object holding all relevant information describing a single Cobra
@@ -230,8 +243,8 @@ class Telescope(object):
     def observeWithNetflow(self, tgt, nvisit, tvisit):
         for t in tgt:
             t.calc_position(self._ra, self._dec, self._posang, self._time)
-        #tgt = self.select_visible_targets(tgt)
-        build_network (self._Cobras, tgt, nvisit, tvisit)
+        # tgt = self.select_visible_targets(tgt)
+        return build_network (self._Cobras, tgt, nvisit, tvisit)
 
 
 class Target(object):
