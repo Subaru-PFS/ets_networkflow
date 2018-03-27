@@ -2,41 +2,17 @@ import pyETS
 import libETS.data_model as dm
 import numpy as np
 
-
-class SkyCalibTarget(dm.CalibTarget):
-    """Class for sky calibration targets"""
-    nonObservationCost = 10000.
-
-    @staticmethod
-    def numRequired():
-        return 1
-    @staticmethod
-    def classname():
-        return "sky_P1"
-
-class StarCalibTarget(dm.CalibTarget):
-    """Class for star calibration targets"""
-    nonObservationCost = 10000.
-
-    @staticmethod
-    def numRequired():
-        return 1
-    @staticmethod
-    def classname():
-        return "cal_P1"
-
-# ... maybe other calibration classes
-
 # define locations of the input files
 catalog_path = "/home/martin/codes/ets_fiber_assigner/pfs_target_list"
 fscience_targets = catalog_path+"/pfs_preliminary_target_cosmology.dat"
+#fscience_targets = catalog_path+"/pfs_preliminary_target_galaxy.dat"
 fcal_stars       = catalog_path+"/pfs_preliminary_target_cosmology_fcstars.dat"
 fsky_pos         = catalog_path+"/pfs_preliminary_target_cosmology_sky.dat"
 
 # read all targets into a sigle list, giving them their proper types
 tgt = dm.readScientificFromFile(fscience_targets)
-tgt += dm.readCalibrationFromFile(fcal_stars, StarCalibTarget)
-tgt += dm.readCalibrationFromFile(fsky_pos, SkyCalibTarget)
+tgt += dm.readCalibrationFromFile(fcal_stars, "cal_P1")
+tgt += dm.readCalibrationFromFile(fsky_pos, "sky_P1")
 
 # get a complete, idealized focal plane configuration
 cobras = dm.getFullFocalPlane()
@@ -50,5 +26,16 @@ posang = 0.
 otime = "2016-04-03T08:00:00Z"
 telescope = dm.Telescope(cobras, 1., raTel, decTel, posang, otime)
 
-res=telescope.observeWithNetflow(tgt, 9, 300.)
-#print(res)
+classdict={}
+classdict["sci_P1"] = {"nonObservationCost": 100, "partialObservationCost": 1e9}
+classdict["sci_P2"] = {"nonObservationCost": 90, "partialObservationCost": 1e9}
+classdict["sci_P3"] = {"nonObservationCost": 80, "partialObservationCost": 1e9}
+classdict["sci_P4"] = {"nonObservationCost": 70, "partialObservationCost": 1e9}
+classdict["sci_P5"] = {"nonObservationCost": 60, "partialObservationCost": 1e9}
+classdict["sci_P6"] = {"nonObservationCost": 50, "partialObservationCost": 1e9}
+classdict["sci_P7"] = {"nonObservationCost": 40, "partialObservationCost": 1e9}
+classdict["sky_P1"] = {"numRequired": 1}
+classdict["cal_P1"] = {"numRequired": 1}
+
+res=telescope.observeWithNetflow(tgt, classdict, 3, 300.)
+print(res)

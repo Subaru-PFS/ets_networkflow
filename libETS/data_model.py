@@ -1,13 +1,17 @@
-import abc
 import numpy as np
 import pycconv
 import pyETS
 from collections import OrderedDict, defaultdict
-import time
 import pulp
 
+def get_visibility(cobras, targets):
+    pos = [t.position for t in targets]
+    cbr = [[c.center, c.innerLinkLength, c.outerLinkLength, c.dotcenter,
+            c.rdot] for c in cobras]
 
-def build_network(cobras, targets, nvisits, tvisit):
+    return pyETS.getVis(pos, cbr)
+
+def build_network(cobras, targets, classdict, nvisits, tvisit):
     Cv_i = defaultdict(list)  # Cobra visit inflows
     Tv_o = defaultdict(list)  # Target visit outflows
     Tv_i = defaultdict(list)  # Target visit inflows
@@ -25,12 +29,7 @@ def build_network(cobras, targets, nvisits, tvisit):
         else:
             nreqvisit.append(0)
 
-    # determine visibilities
-    pos = [t.position for t in targets]
-    cbr = [[c.center, c.innerLinkLength, c.outerLinkLength, c.dotcenter,
-            c.rdot] for c in cobras]
-
-    vis = pyETS.getVis(pos, cbr)
+    vis = get_visibility(cobras, targets)
 
     def newvar(lo, hi):
         newvar._varcount += 1
@@ -44,6 +43,8 @@ def build_network(cobras, targets, nvisits, tvisit):
     for ivis in range(nvisits):
         for tidx, val in vis[ivis].items():
             tgt = targets[tidx]
+            TC = tgt.targetclass
+            Class = classdict[TC]
             if isinstance(tgt, ScienceTarget):
                 # Target node to target visit node
                 f = newvar(0, 1)
@@ -53,21 +54,21 @@ def build_network(cobras, targets, nvisits, tvisit):
                     # Science Target class node to target node
                     f = newvar(0, 1)
                     T_i[tidx].append(f)
-                    STC_o[type(tgt)].append(f)
-                    if len(STC_o[type(tgt)]) == 1:  # freshly created
+                    STC_o[TC].append(f)
+                    if len(STC_o[TC]) == 1:  # freshly created
                         # Science Target class node to sink
                         f = newvar(0, None)
-                        STC_o[type(tgt)].append(f)
-                        cost += f*tgt.nonObservationCost
+                        STC_o[TC].append(f)
+                        cost += f*Class["nonObservationCost"]
                     # Science Target node to sink
                     f = newvar(0, None)
                     T_o[tidx].append(f)
-                    cost += f*tgt.partialObservationCost
+                    cost += f*Class["partialObservationCost"]
             elif isinstance(tgt, CalibTarget):
                 # Calibration Target class node to target visit node
                 f = newvar(0, 1)
                 Tv_i[(tidx, ivis)].append(f)
-                CTCv_o[(type(tgt), ivis)].append(f)
+                CTCv_o[(TC, ivis)].append(f)
             for cidx in val:
                 # target visit node to cobra visit node
                 f = newvar(0, 1)
@@ -86,7 +87,7 @@ def build_network(cobras, targets, nvisits, tvisit):
     # every calibration target class must be observed a minimum number of times
     # every visit
     for key, value in CTCv_o.items():
-        prob += pulp.lpSum([v for v in value]) >= key[0].numRequired()
+        prob += pulp.lpSum([v for v in value]) >= classdict[key[0]]["numRequired"]
 
     # inflow and outflow at every Tv node must be balanced
     for key, ival in Tv_i.items():
@@ -113,8 +114,7 @@ def build_network(cobras, targets, nvisits, tvisit):
             if visited:
                 tidx, ivis = k1
                 cidx = i2[1]
-                res[ivis][targets[tidx].ID] = cobras[cidx].ID
-                # print("visit:{} tgt {} observed by cobra {}".format(ivis, tidx, cidx))
+                res[ivis][tidx] = cidx
     return res
 
 
@@ -219,32 +219,11 @@ class Telescope(object):
                 res.append(t)
         return res
 
-    def observeWithETS(self, tgt, nvisit, tvisit, assigner):
-        tgt = self.select_visible_targets(tgt)
-
-        cbr = []
-        for c in self._Cobras:
-            cbr.append([c.center, c.innerLinkLength, c.outerLinkLength,
-                        c.dotcenter, c.rdot])
-
-        res = []
-        for i in range(nvisit):
-            pos = [t.position for t in tgt]
-            pri = [t.priority for t in tgt]
-            time = [t.obs_time for t in tgt]
-            tmp = pyETS.getObs(pos, time, pri, cbr, assigner)
-            d = {}
-            for key, value in tmp.items():
-                d[tgt[key].ID] = self._Cobras[value].ID
-            res.append(d)
-            tgt = self.subtract_obs_time(tgt, tmp, tvisit)
-        return res
-
-    def observeWithNetflow(self, tgt, nvisit, tvisit):
+    def observeWithNetflow(self, tgt, classdict, nvisit, tvisit):
         for t in tgt:
             t.calc_position(self._ra, self._dec, self._posang, self._time)
         # tgt = self.select_visible_targets(tgt)
-        return build_network (self._Cobras, tgt, nvisit, tvisit)
+        return build_network (self._Cobras, tgt, classdict, nvisit, tvisit)
 
 
 class Target(object):
@@ -252,11 +231,12 @@ class Target(object):
     initialized with RA/Dec and an ID string. From RA/Dec, the target can
     determine its position on the focal plane, once also the telescope attitude
     is known. """
-    def __init__(self, ID, ra, dec):
+    def __init__(self, ID, ra, dec, targetclass):
         self._ID = str(ID)
         self._ra = float(ra)
         self._dec = float(dec)
         self._position = None
+        self._targetclass = targetclass
 
     @property
     def ID(self):
@@ -280,6 +260,10 @@ class Target(object):
         """the position in the focal plane : pos"""
         return self._position
 
+    @property
+    def targetclass(self):
+        """string representation of the target's class"""
+        return self._targetclass
 
 class ScienceTarget(Target):
     """Derived from the Target class, with the additional attributes priority
@@ -288,29 +272,9 @@ class ScienceTarget(Target):
     All different types of ScienceTarget need to be derived from this class."
     """
     def __init__(self, ID, ra, dec, obs_time, pri):
-        super(ScienceTarget, self).__init__(ID, ra, dec)
+        super(ScienceTarget, self).__init__(ID, ra, dec, "sci_P{}".format(pri))
         self._obs_time = float(obs_time)
         self._pri = int(pri)
-
-    @property
-    def priority(self):
-        """target priority : int"""
-        return self._pri
-
-    @property
-    def nonObservationCost(self):
-        if self._pri == 1:
-            return 1000.
-        elif self._pri == 2:
-            return 100.
-        elif self._pri == 3:
-            return 10.
-        else:
-            return 1.
-
-    @property
-    def partialObservationCost(self):
-        return 1e9
 
     @property
     def obs_time(self):
@@ -322,13 +286,7 @@ class ScienceTarget(Target):
 
 
 class CalibTarget(Target):
-    """Derived from the Target class.
-    Needs to define a class variable called 'nonObservationCost'
-    and a property called 'classname'"""
-    @abc.abstractmethod
-    def numRequired():
-        """returns the required number of targets for this target class"""
-        pass
+    """Derived from the Target class."""
 
 
 def telescopeRaDecFromFile(file):
@@ -359,7 +317,7 @@ def readScientificFromFile(file):
     return res
 
 
-def readCalibrationFromFile(file, cls):
+def readCalibrationFromFile(file, targetclass):
     with open(file) as f:
         res = []
         ll = f.readlines()
@@ -367,7 +325,7 @@ def readCalibrationFromFile(file, cls):
             if not l.startswith("#"):
                 tt = l.split()
                 id_, ra, dec = (str(tt[0]), float(tt[1]), float(tt[2]))
-                res.append(cls(id_, ra, dec))
+                res.append(CalibTarget(id_, ra, dec, targetclass))
     return res
 
 
