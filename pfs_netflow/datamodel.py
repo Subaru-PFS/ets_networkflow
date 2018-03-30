@@ -189,6 +189,7 @@ class OverflowArc(Arc):
 class TargetClass(Node):
     def __init__(self, id):
         super(TargetClass, self).__init__(id)
+        self.ID = id
         self.capacity = inf
         self.targets = OrderedDict()
         # Cost of non-observation
