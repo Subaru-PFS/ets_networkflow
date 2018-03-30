@@ -11,6 +11,7 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, class_dict,
                     cost_dict, supply_dict, NVISITS, RMAX, CENTER, COBRAS=[]):
     print("buildSurveyPlan")
 
+
     # Check if a visit specific cost was given as part of the cost function.
     # Set all visits to zero (extra) cost otherwise.
     if 'visits' not in cost_dict:
@@ -37,7 +38,6 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, class_dict,
     else:
         visibilities = [visibilities] * NVISITS
 
-    TARGETS = []
     # generate a directed graph
     g = dm.SurveyPlan()
     g.visits = list(range(NVISITS))
@@ -90,8 +90,6 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, class_dict,
         tc = class_dict[tid]
         x, y = targets[tid]
         if (x-CENTER[0])**2 + (y-CENTER[1])**2 > RMAX**2:
-            continue
-        if TARGETS != [] and tid not in TARGETS:
             continue
         if tc.startswith("sci_"):
             t = dm.SciTarget(tid, x=x, y=y)
