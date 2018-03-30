@@ -1,18 +1,134 @@
-import abc
 import numpy as np
 import pycconv
 import pyETS
-from collections import OrderedDict
-from pfs_netflow.survey_plan import buildSurveyPlan
-from pfs_netflow.lp import buildLPProblem, computeStats, solve
-import time
+from collections import OrderedDict, defaultdict
 import pulp
-from pfs_netflow.plotting import plotSurveyPlan, plotFocalPlane
-import pfs_netflow.datamodel as dm
+
+
+def _get_visibility(cobras, targets):
+    pos = [t.position for t in targets]
+    cbr = [[c.center, c.innerLinkLength, c.outerLinkLength, c.dotcenter,
+            c.rdot] for c in cobras]
+
+    return pyETS.getVis(pos, cbr)
+
+
+def _build_network(cobras, targets, classdict, nvisits, tvisit):
+    Cv_i = defaultdict(list)  # Cobra visit inflows
+    Tv_o = defaultdict(list)  # Target visit outflows
+    Tv_i = defaultdict(list)  # Target visit inflows
+    T_o = defaultdict(list)  # Target outflows (only science targets)
+    T_i = defaultdict(list)  # Target inflows (only science targets)
+    CTCv_o = defaultdict(list)  # Calibration Target visit outflows
+    STC_o = defaultdict(list)  # Science Target outflows
+    prob = pulp.LpProblem("problem", pulp.LpMinimize)
+    cost = pulp.LpVariable("cost", 0)
+
+    nreqvisit = []
+    for t in targets:
+        if isinstance(t, ScienceTarget):
+            nreqvisit.append(int(t.obs_time/tvisit))
+        else:
+            nreqvisit.append(0)
+
+    vis = _get_visibility(cobras, targets)
+
+    def newvar(lo, hi):
+        newvar._varcount += 1
+        return pulp.LpVariable("v{}".format(newvar._varcount), lo, hi,
+                               cat=pulp.LpInteger)
+    newvar._varcount = 0
+
+    vis = [vis for _ in range(nvisits)]  # just replicate for now
+
+    # define LP variables
+    for ivis in range(nvisits):
+        for tidx, val in vis[ivis].items():
+            tgt = targets[tidx]
+            TC = tgt.targetclass
+            Class = classdict[TC]
+            if isinstance(tgt, ScienceTarget):
+                # Target node to target visit node
+                f = newvar(0, 1)
+                T_o[tidx].append(f)
+                Tv_i[(tidx, ivis)].append(f)
+                if len(T_o[tidx]) == 1:  # freshly created
+                    # Science Target class node to target node
+                    f = newvar(0, 1)
+                    T_i[tidx].append(f)
+                    STC_o[TC].append(f)
+                    if len(STC_o[TC]) == 1:  # freshly created
+                        # Science Target class node to sink
+                        f = newvar(0, None)
+                        STC_o[TC].append(f)
+                        cost += f*Class["nonObservationCost"]
+                    # Science Target node to sink
+                    f = newvar(0, None)
+                    T_o[tidx].append(f)
+                    cost += f*Class["partialObservationCost"]
+            elif isinstance(tgt, CalibTarget):
+                # Calibration Target class node to target visit node
+                f = newvar(0, 1)
+                Tv_i[(tidx, ivis)].append(f)
+                CTCv_o[(TC, ivis)].append(f)
+            for cidx in val:
+                # target visit node to cobra visit node
+                f = newvar(0, 1)
+                Cv_i[(cidx, ivis)].append(f)
+                Tv_o[(tidx, ivis)].append((f, cidx))
+
+    # Cost function
+    prob += cost
+
+    # Constraints
+
+    # every Cobra can observe at most one target per visit
+    for inflow in Cv_i.values():
+        prob += pulp.lpSum([f for f in inflow]) <= 1
+
+    # every calibration target class must be observed a minimum number of times
+    # every visit
+    for key, value in CTCv_o.items():
+        prob += pulp.lpSum([v for v in value]) >= \
+                classdict[key[0]]["numRequired"]
+
+    # inflow and outflow at every Tv node must be balanced
+    for key, ival in Tv_i.items():
+        oval = Tv_o[key]
+        prob += pulp.lpSum([v for v in ival]+[-v[0] for v in oval]) == 0
+
+    # inflow and outflow at every T node must be balanced
+    for key, ival in T_i.items():
+        oval = T_o[key]
+        nvis = nreqvisit[key]
+        prob += pulp.lpSum([nvis*v for v in ival]+[-v for v in oval]) == 0
+
+    # Science targets must be either observed or go to the sink
+    for key, val in STC_o.items():
+        prob += pulp.lpSum([v for v in val]) == len(val)-1
+
+    status = prob.solve(pulp.COIN_CMD(msg=1, keepFiles=0, maxSeconds=1000,
+                                      threads=1, dual=10.))
+
+    res = [{} for _ in range(nvisits)]
+    for k1, v1 in Tv_o.items():
+        for i2 in v1:
+            visited = pulp.value(i2[0]) > 0
+            if visited:
+                tidx, ivis = k1
+                cidx = i2[1]
+                res[ivis][tidx] = cidx
+    return res
 
 
 class Cobra(object):
-    def __init__ (self, ID, center, dotcenter, rdot, li, lo):
+    """An object holding all relevant information describing a single Cobra
+    positioner.
+    This includes center position, black dot position, black dot radius, and
+    inner and outer link lengths.
+    All lengths in mm, positions are stored as complex numbers.
+    """
+    def __init__(self, ID, center, dotcenter, rdot, li, lo):
         self._ID = str(ID)
         self._center = complex(center)
         self._dotcenter = complex(dotcenter)
@@ -52,6 +168,14 @@ class Cobra(object):
 
 
 class Telescope(object):
+    """An object describing a telescope configuration to be used for observing
+    a target field. Includes a list of Cobras, telescope RA/Dec and position
+    angle and an observation time according to ISO8601 UTC.
+    The minimum allowed distance between two Cobra tips is also stored here.
+    Based on this information, and given a list of targets, this object can
+    compute assignment strategies using different algorithms (currently network
+    flow and ETs approaches).
+    """
     def __init__(self, Cobras, collisionRadius, ra, dec, posang, time):
         self._Cobras = tuple(Cobras)
         self._cobraCollisionRadius = float(collisionRadius)
@@ -98,149 +222,24 @@ class Telescope(object):
                 res.append(t)
         return res
 
-    def observeWithETS(self, tgt, nvisit, tvisit, assigner):
-        tgt = self.select_visible_targets(tgt)
-
-        cbr = []
-        for c in self._Cobras:
-            cbr.append([c.center, c.innerLinkLength, c.outerLinkLength,
-                        c.dotcenter, c.rdot])
-
-        res = []
-        for i in range(nvisit):
-            pos = [t.position for t in tgt]
-            pri = [t.priority for t in tgt]
-            time = [t.obs_time for t in tgt]
-            tmp = pyETS.getObs(pos, time, pri, cbr, assigner)
-            d = {}
-            for key, value in tmp.items():
-                d[tgt[key].ID] = self._Cobras[value].ID
-            res.append(d)
-            tgt = self.subtract_obs_time(tgt, tmp, tvisit)
-        return res
-
-    def observeWithNetflow(self, tgt, nvisit, tvisit):
-        tgt = self.select_visible_targets(tgt)
-        # build dictionaries
-        # supply_dict:
-        # - for all scientific targets: infinity
-        # - for all types of calibration targets: take number from class
-        # cost_dict:
-        # - scientific targets: get from object
-        # -
-        xcobras = OrderedDict()
-        for i,c in enumerate(self._Cobras):
-            xcobras[c.ID] = [np.real(c.center), np.imag(c.center)]
-
-        targets = OrderedDict()
-        for i,t in enumerate(tgt):
-            targets[t.ID] = [np.real(t.position), np.imag(t.position)]
-
-        nreqvisit = []
+    def observeWithNetflow(self, tgt, classdict, nvisit, tvisit):
         for t in tgt:
-            if isinstance(t,ScienceTarget):
-                nreqvisit.append(int(t.obs_time/tvisit))
-            else:
-                nreqvisit.append(0)
+            t.calc_position(self._ra, self._dec, self._posang, self._time)
+        # tgt = self.select_visible_targets(tgt)
+        return _build_network(self._Cobras, tgt, classdict, nvisit, tvisit)
 
-        # determine visibilities
-        pos = [t.position for t in tgt]
-        cbr = []
-        for c in self._Cobras:
-            cbr.append([c.center, c.innerLinkLength, c.outerLinkLength,
-                        c.dotcenter, c.rdot])
-        vis = pyETS.getVis(pos, cbr)
-
-        visibilities = OrderedDict()
-        for key, val in vis.items():
-            tid = tgt[key].ID
-            cc = [self._Cobras[c].ID for c in val]
-            visibilities[tid] = cc
-
-        class_dict = {}
-        cost_dict = {}
-        supply_dict = {}
-        for t in tgt:
-            if isinstance(t, ScienceTarget):
-                cls = "sci_P{}".format(t.priority)
-                class_dict[t.ID] = cls
-                supply_dict[cls] = np.inf
-                cost_dict[cls] = (t.nonObservationCost, t.partialObservationCost)
-            elif isinstance(t, CalibTarget):
-                cls = t.classname()
-                class_dict[t.ID] = cls
-                supply_dict[cls] = t.numRequired()
-                cost_dict[cls] = t.nonObservationCost
-            else:
-                raise TypeError
-        A = 0.
-        cost_dict['cobra_move'] = lambda d : d*A
-
-        g = buildSurveyPlan(xcobras, targets, nreqvisit, visibilities,
-                            class_dict, cost_dict, supply_dict, nvisit, 500.,
-                            [0., 0.])
-        print("Building LP problem ...")
-        start_time = time.time()
-        prob, flows, cost = buildLPProblem(g, cat='Integer')
-        #prob, flows, cost = buildLPProblem(g, cat='Continuous')
-        time_to_build = time.time() - start_time
-        print("Time to build model: {:.4e} s".format(time_to_build))
-        # Solve problem!
-        print("Solving LP problem ...")
-        start_time = time.time()
-
-
-        status = solve(prob, maxSeconds=100) #, solver="GUROBI")
-        def setflows(g,flows):
-            for a in g.arcs.values():
-                k = '{}={}'.format(a.startnode.id,a.endnode.id)
-                if k in flows:
-                    a.flow = pulp.value(flows[k])
-        setflows(g, flows)
-
-        res = []
-        for i in range(nvisit):
-            res.append({})
-        for a in g.arcs.values():
-            n1, n2 = a.startnode, a.endnode
-            if a.flow > 0.01:
-                if type(n2) == dm.CobraVisit and type(n1) == dm.TargetVisit:
-                    visit = n2.visit
-                    cobraID = n2.cobra.id[2:]
-                    targetID = n1.target.id[2:]
-                    res[visit][targetID] = cobraID
-                elif type(n2) == dm.CobraVisit and type(n1) == dm.CalTarget:
-                    visit = n2.visit
-                    cobraID = n2.cobra.id
-                    cobraID = cobraID[2:]
-                    vstr = "_v{}".format(visit)
-                    targetID = n1.id[2:-len(vstr)]
-                    res[visit][targetID] = cobraID
-
-        time_to_solve = time.time() - start_time
-        print("Solve status is [{}].".format( pulp.LpStatus[status] ))
-        print("Time to solve: {:.4e} s".format(time_to_solve))
-
-        stats = computeStats(g, flows, cost)
-
-        NSciTargets = 0
-        for t in tgt:
-            if isinstance(t, ScienceTarget):
-                NSciTargets += 1
-        print("{} = {}".format('Value of cost function',pulp.value(stats.cost) ) )
-        print("[{}] out of {} science targets get observed.".format(int(stats.NSciObs),NSciTargets))
-        print("For {} out of these all required exposures got allocated.".format(stats.NSciComplete))
-        print("{} targets get sent down the overflow arc.".format(stats.Noverflow))
-        print("{} out of {} cobras observed a target in one or more exposures.".format(stats.Ncobras_used, len(self._Cobras) ))
-        print("{} cobras observed a target in all exposures.".format(stats.Ncobras_fully_used))
-        return res
 
 class Target(object):
-    def __init__(self, ID, ra, dec):
+    """Base class for all target types observable with PFS. All targets are
+    initialized with RA/Dec and an ID string. From RA/Dec, the target can
+    determine its position on the focal plane, once also the telescope attitude
+    is known. """
+    def __init__(self, ID, ra, dec, targetclass):
         self._ID = str(ID)
         self._ra = float(ra)
         self._dec = float(dec)
         self._position = None
+        self._targetclass = targetclass
 
     @property
     def ID(self):
@@ -257,39 +256,30 @@ class Target(object):
 
     def calc_position(self, raTel, decTel, posang, time):
         self._position = pycconv.cconv([self._ra], [self._dec],
-                                       raTel,decTel,posang,time)[0]
+                                       raTel, decTel, posang, time)[0]
 
     @property
     def position(self):
         """the position in the focal plane : pos"""
         return self._position
 
+    @property
+    def targetclass(self):
+        """string representation of the target's class"""
+        return self._targetclass
+
 
 class ScienceTarget(Target):
-    def __init__(self, ID, ra, dec, obs_time, pri):
-        super(ScienceTarget, self).__init__(ID, ra, dec)
+    """Derived from the Target class, with the additional attributes priority
+    and observation time.
+
+    All different types of ScienceTarget need to be derived from this class."
+    """
+    def __init__(self, ID, ra, dec, obs_time, pri, prefix):
+        super(ScienceTarget, self).__init__(ID, ra, dec,
+                                            "{}_P{}".format(prefix, pri))
         self._obs_time = float(obs_time)
         self._pri = int(pri)
-
-    @property
-    def priority(self):
-        """target priority : int"""
-        return self._pri
-
-    @property
-    def nonObservationCost(self):
-        if self._pri==1:
-            return 1000.
-        elif self._pri==2:
-            return 100.
-        elif self._pri==3:
-            return 10.
-        else:
-            return 1.
-
-    @property
-    def partialObservationCost(self):
-        return 1e9
 
     @property
     def obs_time(self):
@@ -301,49 +291,46 @@ class ScienceTarget(Target):
 
 
 class CalibTarget(Target):
-    """ needs to define a class variable called 'nonObservationCost'
-    and a property called 'classname'"""
-    @abc.abstractmethod
-    def numRequired():
-        """ returns the required number of targets for this target class"""
-        pass
+    """Derived from the Target class."""
+
 
 def telescopeRaDecFromFile(file):
     with open(file) as f:
-        ras=[]
-        decs=[]
-        ll=f.readlines()
+        ras = []
+        decs = []
+        ll = f.readlines()
         for l in ll[1:]:
             if not l.startswith("#"):
                 tt = l.split()
-                ra,dec = (float(tt[1]), float(tt[2]))
+                ra, dec = (float(tt[1]), float(tt[2]))
                 ras.append(ra)
                 decs.append(dec)
     return float(np.average(ras)), float(np.average(decs))
 
 
-def readScientificFromFile(file):
+def readScientificFromFile(file, prefix):
     with open(file) as f:
         res = []
-        ll=f.readlines()
+        ll = f.readlines()
         for l in ll[1:]:
             if not l.startswith("#"):
                 tt = l.split()
-                id_,ra,dec,tm,pri = (str(tt[0]), float(tt[1]), float(tt[2]),
-                                     float(tt[3]), int(tt[4]))
-                res.append(ScienceTarget(id_, ra, dec, tm, pri))
+                id_, ra, dec, tm, pri = (
+                    str(tt[0]), float(tt[1]), float(tt[2]),
+                    float(tt[3]), int(tt[4]))
+                res.append(ScienceTarget(id_, ra, dec, tm, pri, prefix))
     return res
 
 
-def readCalibrationFromFile(file, cls):
+def readCalibrationFromFile(file, targetclass):
     with open(file) as f:
         res = []
-        ll=f.readlines()
+        ll = f.readlines()
         for l in ll[1:]:
             if not l.startswith("#"):
                 tt = l.split()
-                id_,ra,dec = (str(tt[0]), float(tt[1]), float(tt[2]))
-                res.append(cls(id_, ra, dec))
+                id_, ra, dec = (str(tt[0]), float(tt[1]), float(tt[2]))
+                res.append(CalibTarget(id_, ra, dec, targetclass))
     return res
 
 
