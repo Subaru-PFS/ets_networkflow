@@ -2,6 +2,7 @@ from __future__ import print_function
 from __future__ import absolute_import
 import pulp
 from collections import namedtuple
+from collections import OrderedDict
 import numpy as np
 import time
 from . import datamodel as dm
@@ -126,8 +127,7 @@ def buildLPProblem(g, name="MinCostFlowTest", cat='Integer'):
 
 
 def computeStats(g, flows, cost):
-    Stats = namedtuple('Stats',
-        ['cost', 'NSciObs', 'NCalObs', 'NSciComplete', 'NCalComplete', 'Noverflow', 'Ncobras_used', 'Ncobras_fully_used'])
+    stats = OrderedDict()
 
     NSciObs = 0
     NSciComplete = 0
@@ -138,10 +138,10 @@ def computeStats(g, flows, cost):
     for t in g.sciTargets.values():
         NSciObs += pulp.value(sum([flows[a.id] for a in t.inarcs]))
         NSciComplete += int(sum([pulp.value(flows[a.id]) for a in t.outarcs]) == t.gain)
-
+            
     Noverflow = 0
     for tcid, tc in g.sciTargetClasses.items():
-        Noverflow += pulp.value(flows['{}=SINK'.format(tcid)])
+        Noverflow += int( pulp.value(flows['{}=SINK'.format(tcid)]) )
 
     Ncobras_used = 0
     Ncobras_fully_used = 0
@@ -149,5 +149,28 @@ def computeStats(g, flows, cost):
         v = pulp.value(sum([flows[a.id] for a in c.inarcs]))
         Ncobras_used += int(v > 0)
         Ncobras_fully_used += int(v == NVISITS)
+        
+    stats['cost'] = pulp.value(cost)
+    stats['NSciObs'] = NSciObs
+    #stats['NCalObs'] = NCalObs
+    stats['NSciComplete'] = NSciComplete
+    #stats['NCalComplete'] = NCalComplete
+    stats['Noverflow'] = Noverflow
+    stats['Ncobras_used'] = Ncobras_used
+    stats['Ncobras_fully_used'] =  Ncobras_fully_used
+    
 
-    return Stats(pulp.value(cost), NSciObs, NCalObs, NSciComplete, NCalComplete, Noverflow, Ncobras_used, Ncobras_fully_used)
+    compl = {}
+    for stc in g.sciTargetClasses.values():
+        _NObs = 0
+        _NComplete = 0
+        for t in stc.targets.values(): 
+            _NObs += int( pulp.value(sum([flows[a.id] for a in t.inarcs])) )
+            _NComplete += int(sum([pulp.value(flows[a.id]) for a in t.outarcs]) == t.gain)
+            
+        compl[stc.ID] = {'total' : len(stc.targets), 'observed' : _NObs, 'completed' : _NComplete}
+
+
+    stats['completion'] = compl
+
+    return stats
