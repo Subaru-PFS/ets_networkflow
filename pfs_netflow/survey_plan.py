@@ -9,6 +9,27 @@ from . import datamodel as dm
 
 def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, class_dict,
                     cost_dict, supply_dict, NVISITS, RMAX, CENTER, COBRAS=[]):
+    """
+    Builds a graph which represents a survey plan.
+    
+
+    Args:
+        cobras (OrderedDict): A dictionary of cobra x,y in the focal plane. The key is the cobra ID.
+        targets (OrderedDict): A dictionary of target x,y in the focal plane. The key is the target ID.
+        nreqvisits (OrderedDict): Number of required visits per target. The key is the target ID, elements are int.
+        visibilities (OrderedDict): The second parameter.
+        class_dict (OrderedDict): Dictionary to which specifies the target class per target ID.
+        cost_dict (OrderedDict): Dictionary specifing the cost function (cost of non-observation and more).
+        supply_dict (OrderedDict): Dictionary specifing the supply (number targets in each target class that must be observed).
+        RMAX (float): Limits the problem to a specific maximum radius in the focal plane.
+        CENTER (2-tuple of float): Limits the problem to a specific center in the focal plane.
+        COBRAS (list of CID): Limits the problem to a specific list of cobras in the focal plane.
+        
+
+    Returns:
+        datamodel.SurveyPlan: The survey graph.
+    """
+    
     print("buildSurveyPlan")
 
 
@@ -34,9 +55,11 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, class_dict,
     if isinstance(visibilities, list):
         assert len(visibilities) >= NVISITS,\
             "The length of the visibilities list (= {}) is less than NVISITS (= {})."\
-            .format(len(visibilities), NVISITS)
+                .format(len(visibilities), NVISITS)
     else:
         visibilities = [visibilities] * NVISITS
+        
+        
 
     # generate a directed graph
     g = dm.SurveyPlan()
