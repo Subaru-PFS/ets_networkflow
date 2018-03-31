@@ -21,6 +21,7 @@ def buildSurveyPlan(cobras, targets, nreqvisits, visibilities, class_dict,
         class_dict (OrderedDict): Dictionary to which specifies the target class per target ID.
         cost_dict (OrderedDict): Dictionary specifing the cost function (cost of non-observation and more).
         supply_dict (OrderedDict): Dictionary specifing the supply (number targets in each target class that must be observed).
+        NVISITS (int): Total number of visits.
         RMAX (float): Limits the problem to a specific maximum radius in the focal plane.
         CENTER (2-tuple of float): Limits the problem to a specific center in the focal plane.
         COBRAS (list of CID): Limits the problem to a specific list of cobras in the focal plane.
