@@ -22,10 +22,14 @@ def plotSurveyPlan(g, name="", PLOTSCI=True, PLOTCAL=True, LABELFLOWS=False, ALT
     def plotNodes(ax, nodes, x, color, label, allnodes):
         # targets
         N = len(nodes)
+        plt.text(x, 0., label, ha='center', va='top')
+        if N == 0:
+            return
         grid = [[x, 1. - (float(i)+1.)/float(N+1)] for i in range(N)]
         patches = []
         for i, (id, n) in enumerate(nodes.items()):
             n.px, n.py = grid[i]
+            
             circle = mpatches.Circle(grid[i], .01, facecolor=color, edgecolor='grey', lw=1.)
             patches.append(circle)
             nlabel(ax, grid[i], id)
@@ -34,7 +38,7 @@ def plotSurveyPlan(g, name="", PLOTSCI=True, PLOTCAL=True, LABELFLOWS=False, ALT
 
         ax.add_collection(collection)
         allnodes += list(nodes.keys())
-        plt.text(x, 0., label, ha='center', va='top')
+        
 
     def plotArcs(ax, g, allnodes, LABELFLOWS, ALTLABELS):
         for a in g.arcs.values():
@@ -137,7 +141,7 @@ def plotFocalPlane(g, visit, summary="", XC=0., YC=0., W=400., name=""):
     allnodes = []  # keep track of nodes actually contained in the plot
     plotNodes(ax, nodes=g.cobras, label="cobras", color="#19967d", allnodes=allnodes)
     plotNodes(ax, nodes=g.sciTargets, label="science\ntargets", color="#ff8f80", allnodes=allnodes)
-    #plotNodes(ax, nodes=g.calTargets, label="calib\ntargets",color="#ffeca9", allnodes=allnodes)
+    plotNodes(ax, nodes=g.calTargets, label="calib\ntargets",color="#ffeca9", allnodes=allnodes)
     plotArcs(ax, g, allnodes, visit)
 
     ax.set_ylim([YC-W/2., YC+W/2.])

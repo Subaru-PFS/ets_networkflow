@@ -4,6 +4,10 @@ from builtins import object
 from collections import OrderedDict
 from numpy import inf
 
+#class FocalPlanePos(object):
+#    def __init__(self, x,y):
+#        self.x = x
+#        self.y = y
 
 class NetworkElement(object):
     def __init__(self):
@@ -32,10 +36,9 @@ class Cobra(Node):
     def getID(cid):
         return "C_{}".format(cid)
 
-    def __init__(self, cid, x, y):
+    def __init__(self, cid, fplane_pos):
         super(Cobra, self).__init__(self.getID(cid))
-        self.x = x
-        self.y = y
+        self.fplane_pos = fplane_pos
 
 
 class CobraVisit(Node):
@@ -227,10 +230,9 @@ class SciTargetClass(TargetClass):
 
 
 class Target(Node):
-    def __init__(self, id, x, y, gain=3):
+    def __init__(self, id, fplane_positions, gain=3):
         super(Target, self).__init__(id)
-        self.x = x
-        self.y = y
+        self.fplane_positions = fplane_positions
         self.gain = gain  # number of required exposures
         self.collision_group = None
         self.targetVisits = {}
@@ -241,8 +243,8 @@ class SciTarget(Target):
     def getID(tid):
         return "T_{}".format(tid)
 
-    def __init__(self, tid, x, y, gain=3):
-        super(SciTarget, self).__init__(self.getID(tid), x, y, gain)
+    def __init__(self, tid, fplane_positions, gain=3):
+        super(SciTarget, self).__init__(self.getID(tid), fplane_positions, gain)
 
 
 class CalTarget(Target):
@@ -255,8 +257,8 @@ class CalTarget(Target):
     def getID(tid, visit):
         return "T_{}_v{}".format(tid, visit)
 
-    def __init__(self, tid, x, y, visit, gain=3):
-        super(CalTarget, self).__init__(self.getID(tid, visit), x, y, gain)
+    def __init__(self, tid, fplane_positions, visit, gain=3):
+        super(CalTarget, self).__init__(self.getID(tid, visit), fplane_positions, gain)
         self.visit = visit
 
 
