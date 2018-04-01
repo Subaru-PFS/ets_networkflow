@@ -97,7 +97,7 @@ def plotSurveyPlan(g, name="", PLOTSCI=True, PLOTCAL=True, LABELFLOWS=False, ALT
         plt.savefig("{}_cal.pdf".format(name))
 
 
-def plotFocalPlane(g, visit, summary="", XC=0., YC=0., W=400., name=""):
+def plotFocalPlane(g, pid, summary="", XC=0., YC=0., W=400., name="", figsize=[15,15]):
 
     def nlabel(ax, xy, text):
         y = xy[1] - 0.  # shift y-value for label so that it's below the artist
@@ -108,15 +108,15 @@ def plotFocalPlane(g, visit, summary="", XC=0., YC=0., W=400., name=""):
         # targets
         patches = []
         for i, (id, n) in enumerate(nodes.items()):
-            n.px, n.py = n.x, n.y
-            circle = mpatches.Circle((n.x, n.y), .75, facecolor=color, edgecolor='grey', lw=1.)
+            n.px, n.py = n.getX(pid), n.getY(pid)
+            circle = mpatches.Circle((n.getX(pid), n.getY(pid)), .75, facecolor=color, edgecolor='grey', lw=1.)
             patches.append(circle)
 
         collection = collections.PatchCollection(patches, match_original=True)
         ax.add_collection(collection)
         allnodes += list(nodes.keys())
 
-    def plotArcs(ax, g, allnodes, visit):
+    def plotArcs(ax, g, allnodes, pid):
         for a in g.arcs.values():
             n1, n2 = a.startnode, a.endnode
             if a.flow > 0.:
@@ -124,29 +124,29 @@ def plotFocalPlane(g, visit, summary="", XC=0., YC=0., W=400., name=""):
             else:
                 alpha = .2
 
-            if type(n2) == dm.CobraVisit and n2.visit == visit and type(n1) == dm.TargetVisit:
-                    x, y = np.array([[n1.target.x, n2.cobra.x], [n1.target.y, n2.cobra.y]])
+            if type(n2) == dm.CobraVisit and n2.visit == pid and type(n1) == dm.TargetVisit:
+                    x, y = np.array([[n1.target.getX(pid), n2.cobra.getX(pid)], [n1.target.getY(pid), n2.cobra.getY(pid)]])
 
                     line = mlines.Line2D(x, y, lw=1, alpha=alpha, zorder=10)
                     ax.add_line(line)
-            if type(n2) == dm.CobraVisit and n2.visit == visit and type(n1) == dm.CalTarget:
-                    x, y = np.array([[n1.x, n2.cobra.x], [n1.y, n2.cobra.y]])
+            if type(n2) == dm.CobraVisit and n2.visit == pid and type(n1) == dm.CalTarget:
+                    x, y = np.array([[n1.getX(pid), n2.cobra.getX(pid)], [n1.getY(pid), n2.cobra.getY(pid)]])
 
                     line = mlines.Line2D(x, y, lw=1, alpha=alpha, zorder=10)
                     ax.add_line(line)
 
-    fig = plt.figure(figsize=[15, 15])
+    fig = plt.figure(figsize=figsize)
     # science targets
     ax = plt.subplot(111)  # note we must use plt.subplots, not plt.subplot
     allnodes = []  # keep track of nodes actually contained in the plot
     plotNodes(ax, nodes=g.cobras, label="cobras", color="#19967d", allnodes=allnodes)
     plotNodes(ax, nodes=g.sciTargets, label="science\ntargets", color="#ff8f80", allnodes=allnodes)
     plotNodes(ax, nodes=g.calTargets, label="calib\ntargets",color="#ffeca9", allnodes=allnodes)
-    plotArcs(ax, g, allnodes, visit)
+    plotArcs(ax, g, allnodes, pid)
 
     ax.set_ylim([YC-W/2., YC+W/2.])
     ax.set_xlim([XC-W/2., XC+W/2.])
     #plt.axis('off')
     plt.text(-0.1, -0.1, summary, ha='left', va='bottom', transform=ax.transAxes, fontsize=8)
-    plt.text(0.5, 1.0, "visit {}/{}".format(visit+1, len(g.visits)), ha='center', va='top', transform=ax.transAxes)
-    plt.savefig("{}_visit{}_fp.pdf".format(name, visit))
+    plt.text(0.5, 1.0, "pointing {}".format(pid), ha='center', va='top', transform=ax.transAxes)
+    plt.savefig("{}_visit{}_fp.pdf".format(name, pid))

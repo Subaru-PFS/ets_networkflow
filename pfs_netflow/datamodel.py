@@ -2,7 +2,7 @@ from builtins import object
 # # Datamodel for the flow network
 
 from collections import OrderedDict
-from numpy import inf
+from numpy import inf, nan
 
 #class FocalPlanePos(object):
 #    def __init__(self, x,y):
@@ -24,7 +24,13 @@ class Node(NetworkElement):
         self.inarcs = []
         self.outarcs = []
         self.supply = 0
-
+        self.fplane_pos = (nan,nan)
+        
+    def getX(self, pid):
+        return self.fplane_pos[0]
+        
+    def getY(self, pid):
+        return self.fplane_pos[1]
 
 class Sink(Node):
     def __init__(self):
@@ -39,6 +45,12 @@ class Cobra(Node):
     def __init__(self, cid, fplane_pos):
         super(Cobra, self).__init__(self.getID(cid))
         self.fplane_pos = fplane_pos
+        
+    def getX(self, pid):
+        return self.fplane_pos[0]
+        
+    def getY(self, pid):
+        return self.fplane_pos[1]
 
 
 class CobraVisit(Node):
@@ -50,7 +62,7 @@ class CobraVisit(Node):
         super(CobraVisit, self).__init__(self.getID(cid, visit))
         self.visit = visit
         self.cobra = cobra
-
+      
 
 class Network(object):
     """
@@ -237,7 +249,12 @@ class Target(Node):
         self.collision_group = None
         self.targetVisits = {}
 
-
+    def getX(self, pid):
+        return self.fplane_positions[pid][0]
+        
+    def getY(self, pid):
+        return self.fplane_positions[pid][1]
+    
 class SciTarget(Target):
     @staticmethod
     def getID(tid):
