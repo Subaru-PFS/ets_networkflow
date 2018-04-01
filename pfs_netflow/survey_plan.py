@@ -128,7 +128,11 @@ def buildSurveyPlan(cobras, targets, nreqv_dict, visibilities, class_dict,
         elif tc.startswith("cal_") or tc.startswith("sky_"):
             for pid in visibilities:
                 # Add as many nodes for each calibration target as there are visits
-                t = dm.CalTarget(tid, fplane_positions=fplane_positions, visit=pid)
+                if tc.startswith("cal_"):
+                    t = dm.StarCalTarget(tid, fplane_positions=fplane_positions, visit=pid)
+                else:
+                    t = dm.SkyCalTarget(tid, fplane_positions=fplane_positions, visit=pid)
+                #t = dm.CalTarget(tid, fplane_positions=fplane_positions, visit=pid)
                 t.gain = 1
                 g.add_node(t)
 

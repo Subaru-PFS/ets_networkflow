@@ -110,7 +110,7 @@ class SurveyPlan(Network):
             self.cobras[node.id] = node
         elif type(node) == CobraVisit:
             self.cobraVisits[node.id] = node
-        elif type(node) == CalTarget:
+        elif type(node) == CalTarget or type(node) == StarCalTarget or type(node) == SkyCalTarget:
             self.calTargets[node.id] = node
             self.targets[node.id] = node
         elif type(node) == SciTarget:
@@ -276,6 +276,22 @@ class CalTarget(Target):
 
     def __init__(self, tid, fplane_positions, visit, gain=3):
         super(CalTarget, self).__init__(self.getID(tid, visit), fplane_positions, gain)
+        self.visit = visit
+
+class SkyCalTarget(CalTarget):
+    """
+    Really the same functionality as CalTarget, but help later discrimination.
+    """
+    def __init__(self, tid, fplane_positions, visit, gain=3):
+        super(SkyCalTarget, self).__init__(tid, fplane_positions, visit, gain)
+        self.visit = visit
+
+class StarCalTarget(CalTarget):
+    """
+    Really the same functionality as CalTarget, but help later discrimination.
+    """
+    def __init__(self, tid, fplane_positions, visit, gain=3):
+        super(StarCalTarget, self).__init__(tid, fplane_positions, visit, gain)
         self.visit = visit
 
 
