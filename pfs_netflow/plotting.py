@@ -151,6 +151,7 @@ def plotFocalPlane(g, pid, summary="", XC=0., YC=0., W=400., name="", figsize=[1
     plt.text(0.5, 1.0, "pointing {}".format(pid), ha='center', va='top', transform=ax.transAxes)
     plt.savefig("{}_visit{}_fp.pdf".format(name, pid))
 
+    
 def plotTargetDistribution(ra, dec, types, pointings, target_fplane_pos, class_dict):
     """
     Plots the distribution of targets on the sky and in the focal plane for all dither positions.
@@ -165,10 +166,10 @@ def plotTargetDistribution(ra, dec, types, pointings, target_fplane_pos, class_d
     ii_sky = list( map( lambda x : x.startswith('sky') , types ) )
     ii_cal = list( map( lambda x : x.startswith('cal') , types ) )
         
-    plt.plot(np.array(ra)[ii_sky],np.array(dec)[ii_sky],'b.' , label='sky', ms=4)
-    plt.plot(np.array(ra)[ii_cal],np.array(dec)[ii_cal],'ro' , label='cal. star', ms=4)
+    plt.plot(np.array(ra)[ii_sky],np.array(dec)[ii_sky],'b.' , label='sky', ms=2)
+    plt.plot(np.array(ra)[ii_cal],np.array(dec)[ii_cal],'ro' , label='cal. star', ms=2)
     plt.plot(np.array(ra)[ii_sci],np.array(dec)[ii_sci],'.', ms=1, label='science')
-    plt.axis('equal')
+    #plt.axis('equal')
     l = plt.legend()
     l.draw_frame(False)
     plt.xlabel("RA [Deg]")
@@ -190,16 +191,20 @@ def plotTargetDistribution(ra, dec, types, pointings, target_fplane_pos, class_d
         targets = target_fplane_pos[pid]
         tclasses = [class_dict[tid] for tid in target_fplane_pos[pid]]
 
+        
         txx = np.array( [t[0] for tid, t in targets.items()] )
         tyy = np.array( [t[1] for tid, t in targets.items()] )
+        
+        RMAX = 300.
+        jj = txx**2. + tyy**2. < RMAX**2.
 
         _ii_sci = list( map( lambda x : x.startswith('sci') , tclasses ) )
         _ii_sky = list( map( lambda x : x.startswith('sky') , tclasses ) )
         _ii_cal = list( map( lambda x : x.startswith('cal') , tclasses ) )
 
-        plt.plot(txx[_ii_sky],tyy[_ii_sky],'b.' , label='sky', ms=4)
-        plt.plot(txx[_ii_cal],tyy[_ii_cal],'ro' , label='cal. star', ms=4)
-        plt.plot(txx[_ii_sci],tyy[_ii_sci],'.', ms=1, label='science')
+        plt.plot(txx[_ii_sky * jj],tyy[_ii_sky * jj],'b.' , label='sky', ms=2)
+        plt.plot(txx[_ii_cal * jj],tyy[_ii_cal * jj],'ro' , label='cal. star', ms=2)
+        plt.plot(txx[_ii_sci * jj],tyy[_ii_sci * jj],'.', ms=1, label='science')
 
 
         plt.axis('equal')
