@@ -1,11 +1,11 @@
 #  1  ID
-#  2  R.A.          [deg.]
-#  3  Dec.          [deg.]
-#  4  Exposure Time [sec.]
+#  2  RA            [deg.]
+#  3  DEC           [deg.]
+#  4  EXP_TIME      [sec.]
 #  5  Priority      [1(highest)-15(lowest)]
 #  6  Magnitude     [AB mag] (currently not available)
 #  7  Redshift
-#  8  Object Type
+#  8  ObjectType
 A000001  227.80821   67.18651   1800.0   2  99.00  N/A  archaeology
 A000002  227.64975   67.18766   7200.0   3  99.00  N/A  archaeology
 A000003  227.55086   67.19036   7200.0   3  99.00  N/A  archaeology

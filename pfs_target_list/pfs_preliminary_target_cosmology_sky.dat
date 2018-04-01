@@ -1,11 +1,11 @@
 #  1  ID
-#  2  R.A.          [deg.]
-#  3  Dec.          [deg.]
-#  4  Exposure Time [sec.]
+#  2  RA            [deg.]
+#  3  DEC           [deg.]
+#  4  EXP_TIME      [sec.]
 #  5  Priority      [1(highest)-15(lowest)]
 #  6  Magnitude     [AB mag] (g-band,HSC-CModel)
 #  7  Redshift
-#  8  Object Type
+#  8  ObjectType
 K000004  34.33100  -3.84464   900.0   1  99.99  N/A  sky(cosmology)
 K000009  34.08495  -4.45316   900.0   1  99.99  N/A  sky(cosmology)
 K000011  34.17467  -4.38710   900.0   1  99.99  N/A  sky(cosmology)

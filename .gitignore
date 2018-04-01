@@ -15,15 +15,4 @@ ets_results_draining.txt
 ets_results_draining_closest.txt
 ets_results_naive.txt
 ets_results_new.txt
-# algorithm: netflow
-# total number of vistis: 6
-# total number of observable science targets: 8118
-# total number of observable cal. targets: 11
-# total number of observable sky positions: 365
-V     nsci  ncal  nsky  nsci_total
-D00    2135    11   200  2135
-D01    2076    11   200  4211
-D02    1957    10   200  6168
-D03    1672    11   200  7840
-D04     999    11   200  8839
-D05     169    11   200  9008
+stats.txt

@@ -150,3 +150,61 @@ def plotFocalPlane(g, pid, summary="", XC=0., YC=0., W=400., name="", figsize=[1
     plt.text(-0.1, -0.1, summary, ha='left', va='bottom', transform=ax.transAxes, fontsize=8)
     plt.text(0.5, 1.0, "pointing {}".format(pid), ha='center', va='top', transform=ax.transAxes)
     plt.savefig("{}_visit{}_fp.pdf".format(name, pid))
+
+def plotTargetDistribution(ra, dec, types, pointings, target_fplane_pos, class_dict):
+    """
+    Plots the distribution of targets on the sky and in the focal plane for all dither positions.
+    """
+
+    # plot targets on sky
+    f = plt.figure(figsize=[5,5])
+    plt.title("Sky")
+    ax = plt.subplot(111)
+    ax.set_facecolor((.95,.95,1.))
+    ii_sci = list( map( lambda x : x.startswith('sci') , types ) )
+    ii_sky = list( map( lambda x : x.startswith('sky') , types ) )
+    ii_cal = list( map( lambda x : x.startswith('cal') , types ) )
+        
+    plt.plot(np.array(ra)[ii_sky],np.array(dec)[ii_sky],'b.' , label='sky', ms=4)
+    plt.plot(np.array(ra)[ii_cal],np.array(dec)[ii_cal],'ro' , label='cal. star', ms=4)
+    plt.plot(np.array(ra)[ii_sci],np.array(dec)[ii_sci],'.', ms=1, label='science')
+    plt.axis('equal')
+    l = plt.legend()
+    l.draw_frame(False)
+    plt.xlabel("RA [Deg]")
+    plt.ylabel("DEC [Deg]")
+
+
+    f = plt.figure(figsize=[17,17])
+    M = int(np.ceil( np.sqrt(len(pointings)) ))
+    # plot targets in focal plane
+    i = 0
+    for pid,(pointing_RA,pointing_DEC) in pointings.items():
+        i += 1
+
+
+        ax = plt.subplot(M,M,i)
+        plt.title("focal plane Pointing {}".format(pid))
+        ax.set_facecolor((.95,.95,.95))
+
+        targets = target_fplane_pos[pid]
+        tclasses = [class_dict[tid] for tid in target_fplane_pos[pid]]
+
+        txx = np.array( [t[0] for tid, t in targets.items()] )
+        tyy = np.array( [t[1] for tid, t in targets.items()] )
+
+        _ii_sci = list( map( lambda x : x.startswith('sci') , tclasses ) )
+        _ii_sky = list( map( lambda x : x.startswith('sky') , tclasses ) )
+        _ii_cal = list( map( lambda x : x.startswith('cal') , tclasses ) )
+
+        plt.plot(txx[_ii_sky],tyy[_ii_sky],'b.' , label='sky', ms=4)
+        plt.plot(txx[_ii_cal],tyy[_ii_cal],'ro' , label='cal. star', ms=4)
+        plt.plot(txx[_ii_sci],tyy[_ii_sci],'.', ms=1, label='science')
+
+
+        plt.axis('equal')
+        l = plt.legend()
+        l.draw_frame(False)
+        plt.xlabel("x [mm]")
+        plt.ylabel("y [mm]")
+    f.tight_layout()
