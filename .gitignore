@@ -1,2 +1,18 @@
 *.pyc
 *.bak
+*.mps
+*.sol
+*.pdf
+*.swp
+.DS_Store
+.ipynb_checkpoints/
+.python-version
+GUROBIPY example.ipynb
+Untitled.ipynb
+gurobi.log
+netflow_COSII_offset_refactor.ipynb
+netflow_GEII.ipynb
+ets_results_draining.txt
+ets_results_draining_closest.txt
+ets_results_naive.txt
+ets_results_new.txt
