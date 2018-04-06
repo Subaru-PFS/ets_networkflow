@@ -5,15 +5,14 @@ from collections import OrderedDict, defaultdict
 import pulp
 
 
-def _get_visibility(cobras, targets):
-    pos = [t.position for t in targets]
+def _get_visibility(cobras, tpos):
     cbr = [[c.center, c.innerLinkLength, c.outerLinkLength, c.dotcenter,
             c.rdot] for c in cobras]
 
-    return pyETS.getVis(pos, cbr)
+    return pyETS.getVis(tpos, cbr)
 
 
-def _build_network(cobras, targets, classdict, nvisits, tvisit):
+def _build_network(cobras, targets, tpos, classdict, tvisit):
     Cv_i = defaultdict(list)  # Cobra visit inflows
     Tv_o = defaultdict(list)  # Target visit outflows
     Tv_i = defaultdict(list)  # Target visit inflows
@@ -31,15 +30,14 @@ def _build_network(cobras, targets, classdict, nvisits, tvisit):
         else:
             nreqvisit.append(0)
 
-    vis = _get_visibility(cobras, targets)
+    vis = [_get_visibility(cobras, tp) for tp in tpos]
+    nvisits = len(vis)
 
     def newvar(lo, hi):
         newvar._varcount += 1
         return pulp.LpVariable("v{}".format(newvar._varcount), lo, hi,
                                cat=pulp.LpInteger)
     newvar._varcount = 0
-
-    vis = [vis for _ in range(nvisits)]  # just replicate for now
 
     # define LP variables
     for ivis in range(nvisits):
@@ -76,6 +74,7 @@ def _build_network(cobras, targets, classdict, nvisits, tvisit):
                 f = newvar(0, 1)
                 Cv_i[(cidx, ivis)].append(f)
                 Tv_o[(tidx, ivis)].append((f, cidx))
+                cost += 0.1*f*ivis
 
     # Cost function
     prob += cost
@@ -119,6 +118,9 @@ def _build_network(cobras, targets, classdict, nvisits, tvisit):
                 cidx = i2[1]
                 res[ivis][tidx] = cidx
     return res
+
+def observeWithNetflow(cbr, tgt, tpos, classdict, tvisit):
+    return _build_network(cbr, tgt, tpos, classdict, tvisit)
 
 
 class Cobra(object):
@@ -189,10 +191,6 @@ class Telescope(object):
         """return all Cobras : tuple(Cobra) or list(Cobra)"""
         return self._Cobras
 
-#    @property
-#    def Spokes(self):
-#        """return geometry of spokes fiducials (TBD)"""
-
     @property
     def cobraCollisionRadius(self):
         """the radius of a Cobra tip : float
@@ -201,17 +199,6 @@ class Telescope(object):
         variable.
         """
         return self._cobraCollisionRadius
-
-    def select_visible_targets(self, tgt):
-        for t in tgt:
-            t.calc_position(self._ra, self._dec, self._posang, self._time)
-        pos = [t.position for t in tgt]
-        cbr = []
-        for c in self._Cobras:
-            cbr.append([c.center, c.innerLinkLength, c.outerLinkLength,
-                        c.dotcenter, c.rdot])
-        tmp = pyETS.getVis(pos, cbr)
-        return [tgt[k] for k in tmp.keys()]
 
     def subtract_obs_time(self, tgt, obs, tvisit):
         res = []
@@ -222,10 +209,13 @@ class Telescope(object):
                 res.append(t)
         return res
 
+    def get_fp_positions(self, tgt):
+        return [t.fp_position(self._ra, self._dec, self._posang, self._time)
+                for t in tgt]
+
     def observeWithNetflow(self, tgt, classdict, nvisit, tvisit):
         for t in tgt:
             t.calc_position(self._ra, self._dec, self._posang, self._time)
-        # tgt = self.select_visible_targets(tgt)
         return _build_network(self._Cobras, tgt, classdict, nvisit, tvisit)
 
 
@@ -238,7 +228,6 @@ class Target(object):
         self._ID = str(ID)
         self._ra = float(ra)
         self._dec = float(dec)
-        self._position = None
         self._targetclass = targetclass
 
     @property
@@ -254,14 +243,9 @@ class Target(object):
     def dec(self):
         """the declination : float"""
 
-    def calc_position(self, raTel, decTel, posang, time):
-        self._position = pycconv.cconv([self._ra], [self._dec],
-                                       raTel, decTel, posang, time)[0]
-
-    @property
-    def position(self):
-        """the position in the focal plane : pos"""
-        return self._position
+    def fp_position(self, raTel, decTel, posang, time):
+        return pycconv.cconv([self._ra], [self._dec],
+                             raTel, decTel, posang, time)[0]
 
     @property
     def targetclass(self):
