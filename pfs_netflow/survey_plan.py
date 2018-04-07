@@ -6,6 +6,8 @@ import numpy as np
 from collections import OrderedDict
 import pulp
 
+from astropy.table import Table, Column
+
 from . import datamodel as dm
 
 
@@ -105,6 +107,7 @@ def buildSurveyPlan(cobras, targets, nreqv_dict, visibilities, class_dict,
             continue
         if tc.startswith("sci_"):
             t = dm.SciTarget(tid, fplane_positions=fplane_positions)
+            t.target_class = tc
             t.gain = nrv
             g.add_node(t)
             
@@ -135,6 +138,7 @@ def buildSurveyPlan(cobras, targets, nreqv_dict, visibilities, class_dict,
                 else:
                     t = dm.SkyCalTarget(tid, fplane_positions=fplane_positions, visit=pid)
                 #t = dm.CalTarget(tid, fplane_positions=fplane_positions, visit=pid)
+                t.target_class = tc
                 t.gain = 1
                 g.add_node(t)
 
@@ -285,7 +289,7 @@ def compute_collision_flow_pairs(g, collision_pairs):
 
 
 
-def computeStats(g, flows, cost):
+def computeStats(g):
     stats = OrderedDict()
 
     NSciObs = 0
@@ -295,21 +299,21 @@ def computeStats(g, flows, cost):
     NVISITS = len(g.visits)
 
     for t in g.sciTargets.values():
-        NSciObs += pulp.value(sum([flows[a.id] for a in t.inarcs]))
-        NSciComplete += int(sum([pulp.value(flows[a.id]) for a in t.outarcs]) == t.gain)
+        NSciObs += sum([a.flow for a in t.inarcs])
+        NSciComplete += int(sum([a.flow for a in t.outarcs]) == t.gain)
             
     Noverflow = 0
     for tcid, tc in g.sciTargetClasses.items():
-        Noverflow += int( pulp.value(flows['{}=SINK'.format(tcid)]) )
+        aid = '{}=SINK'.format(tcid)
+        Noverflow += int( g.arcs[aid].flow )
 
     Ncobras_used = 0
     Ncobras_fully_used = 0
     for c in g.cobras.values():
-        v = pulp.value(sum([flows[a.id] for a in c.inarcs]))
+        v = sum([a.flow for a in c.inarcs])
         Ncobras_used += int(v > 0)
         Ncobras_fully_used += int(v == NVISITS)
         
-    stats['cost'] = pulp.value(cost)
     stats['NSciObs'] = NSciObs
     #stats['NCalObs'] = NCalObs
     stats['NSciComplete'] = NSciComplete
@@ -324,8 +328,8 @@ def computeStats(g, flows, cost):
         _NObs = 0
         _NComplete = 0
         for t in stc.targets.values(): 
-            _NObs += int( pulp.value(sum([flows[a.id] for a in t.inarcs])) )
-            _NComplete += int(sum([pulp.value(flows[a.id]) for a in t.outarcs]) == t.gain)
+            _NObs += int( sum([a.flow for a in t.inarcs] ) )
+            _NComplete += int(sum([ a.flow for a in t.outarcs]) == t.gain)
             
         compl[stc.ID] = {'total' : len(stc.targets), 'observed' : _NObs, 'completed' : _NComplete}
 
@@ -335,9 +339,8 @@ def computeStats(g, flows, cost):
     return stats
 
 
-
     
-def computeTargetCompletion(g, visibilities, class_dict, outfilename):
+def computeCompletion(g, class_dict, outfilename):
     """
     Compute how many science targets, calibration stars and sky positions
     were observed in each poitning. Compute also 
@@ -345,52 +348,75 @@ def computeTargetCompletion(g, visibilities, class_dict, outfilename):
     and write results to "outfilename".
     """
     print("Computing target completion ...")
-    nsci_observed_total = 0
-    NVISITS = len(g.visits)
-    with open(outfilename, 'w') as f:
-        s  = "# algorithm: {}\n".format("netflow")
-        s += "# total number of vistis: {}\n".format(NVISITS)
-        s += "{:5s} {:5s} {:5s} {:5s} {:7s} {:7s} {:7s} {:7s}\n"\
-            .format("V", "nsci", "ncal", "nsky", "nsci_obs", "ncal_obs", "nsky_obs", "nsci_cum")
-        f.write(s)
 
-        for pid in g.visits:
-            print("Pointing {}".format(pid))
-            nsci_observable = 0
-            ncal_observable = 0
-            nsky_observable = 0
 
-            for tid,v in visibilities[pid].items():
-                if len(v) > 0:
-                    if class_dict[tid][:3] == 'cal':
-                        ncal_observable += 1
-                    elif class_dict[tid][:3] == 'sky':
-                        nsky_observable += 1
-                    elif class_dict[tid][:3] == 'sci':
-                        nsci_observable += 1
-                
-                
-            #print("Pointing {}".format(pid))
-            nsci = 0
-            ncal = 0
-            nsky = 0
-            for a in g.arcs.values():
-                n1,n2 = a.startnode,a.endnode
+    filterArcs = lambda a : type(a) == dm.TargetToTargetVisitArc
 
-                if a.flow > 0.:
-                    if type(n2) == dm.CobraVisit and n2.visit == pid:
-                        if type(n1) == dm.TargetVisit:
-                            nsci += 1
-                            nsci_observed_total += 1
-                        elif type(n1) == dm.SkyCalTarget:
-                            nsky  += 1
-                        elif type(n1) == dm.StarCalTarget:
-                            ncal  += 1
+    # consistency checks ....
+    noutarcs = []
+    for t in g.sciTargets.values():
+        aa = list( filter( filterArcs, t.outarcs) )
+        noutarcs.append(len(aa))
+        npointings = np.unique( noutarcs )[0]
 
-            s = "{:5s} {:5d} {:5d} {:5d} {:5d} {:5d} {:5d} {:5d}\n".\
-                format(pid, nsci, ncal, nsky, nsci_observable, ncal_observable, nsky_observable, nsci_observed_total)
-            f.write(s)
+    if not len( np.unique( noutarcs ) ) == 1:
+        print("Error the number of outarcs from each science target not is not equal. Found ", np.unique( noutarcs ))
 
-            #print(" Observed {} science targets, {} calibration targets and {} sky positions.".format(nsci, ncal, nsky))
-            #print(" Observed {} science targets in total.".format(nsci_observed_total))
+    if not npointings == len(g.visits):
+        print("Error the number of outarcs from each science target not match len(g.visits). Found ", np.unique( noutarcs ))
+
+    # now compute per class and per pointing completion analysis
+    tclass_completion  = OrderedDict()
+    tclasses = np.unique( [t.target_class for t in g.sciTargets.values()] )
+
+    # initilize structure to hold results
+    for i, pid in enumerate(g.visits): 
+        tclass_completion[pid] = OrderedDict()
+        for tclass in np.unique(tclasses):
+            tclass_completion[pid][tclass] = 0
+
+    # count cumulative number of target in each class 
+    # that got completed
+    for i, pid in enumerate(g.visits): 
+        print("   Pointing: ", pid)
+
+        for t in g.sciTargets.values():
+            tclass = t.target_class
+            aa = list( filter( filterArcs, t.outarcs) )
+            nobs = np.round( np.sum( [a.flow for a in aa[:i+1] ] ) )
+            if nobs >= t.gain:
+                tclass_completion[pid][tclass] += 1
+       
+
+    # now calculate number of observed calibration objects in each pointing
+    caltclasses = np.unique( [t.target_class for t in g.calTargets.values()] )
+    caltclass_obs  = OrderedDict()
+    for pid in g.visits:
+        ptargets = list( filter( lambda t : t.visit == pid,   g.calTargets.values() ) )
+        caltclass_obs[pid] = OrderedDict()
+        for ctc in caltclasses:
+            #lambda t : class_dict[t.id.split("_")[1] == ctc
+            ctctargets = list( filter(  lambda t : t.target_class == ctc ,   ptargets ) )
+            nobs = int( sum([t.inarcs[0].flow for t in ctctargets]) )
+            caltclass_obs[pid][ctc] = nobs
+
+    # Assemble results in a convenient table
+    names = ['N', 'pid'] + [ t for t in np.unique(tclasses)] + [t for t in np.unique(caltclasses)] 
+    dtype = ['i4', 'S8'] + ['i4'] * len(np.unique(tclasses)) + ['i4'] * len(np.unique(caltclasses))
+    t = Table(names=names, dtype=dtype)
+
+    for i, pid in enumerate( g.visits ):
+        row = [i, pid]
+
+        for tclass in np.unique(tclasses):
+            row += [ tclass_completion[pid][tclass] ]
+        for tclass in np.unique(caltclasses):
+            row += [ caltclass_obs[pid][tclass] ]
+
+        t.add_row(row)
+
+    
+    t.write(outfilename, overwrite=True, format="ascii.commented_header")
     print("Done, write {}.".format(outfilename) )
+    
+    return t

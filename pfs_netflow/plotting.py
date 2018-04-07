@@ -158,7 +158,7 @@ def plotTargetDistribution(ra, dec, types, pointings, target_fplane_pos, class_d
     """
 
     # plot targets on sky
-    f = plt.figure(figsize=[5,5])
+    f = plt.figure(figsize=[15,15])
     plt.title("Sky")
     ax = plt.subplot(111)
     ax.set_facecolor((.95,.95,1.))
@@ -172,6 +172,9 @@ def plotTargetDistribution(ra, dec, types, pointings, target_fplane_pos, class_d
     #plt.axis('equal')
     l = plt.legend()
     l.draw_frame(False)
+    
+    for p in pointings.values():
+        plt.plot(p[0], p[1],'yx')
     plt.xlabel("RA [Deg]")
     plt.ylabel("DEC [Deg]")
 

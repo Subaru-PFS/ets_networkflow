@@ -248,6 +248,7 @@ class Target(Node):
         self.gain = gain  # number of required exposures
         self.collision_group = None
         self.targetVisits = {}
+        self.target_class = None
 
     def getX(self, pid):
         return self.fplane_positions[pid][0]
