@@ -139,8 +139,8 @@ def buildLPProblemGRB(g, name="MinCostFlowTest"):
 
     flows = {}
 
-    def addFlow(m, flows, n, l, u=GRB.INFINITY):
-        f = m.addVar(vtype=GRB.INTEGER, name=n, lb=l, ub=u)
+    def addFlow(m, flows, n, l=0, u=GRB.INFINITY, vtype=GRB.INTEGER):
+        f = m.addVar(vtype=vtype, name=n, lb=l, ub=u)
         flows[n] = f
 
     # add flow variables for target class to target arcs
@@ -149,23 +149,23 @@ def buildLPProblemGRB(g, name="MinCostFlowTest"):
             if arc.endnode.id == "SINK":
                 addFlow(m, flows, arc.id, 0, 1e6)
             else:
-                addFlow(m, flows, arc.id, 0, 1)  # capacity of one
+                addFlow(m, flows, arc.id, vtype=GRB.BINARY)  # capacity of one
                 # target to target visit arcs
                 for arc2 in arc.endnode.outarcs:
                     if arc2.endnode.id == "SINK":
                         addFlow(m, flows, arc2.id, 0, 1e6)
                     else:
-                        addFlow(m, flows, arc2.id, 0, 1)  # capacity of one
+                        addFlow(m, flows, arc2.id, vtype=GRB.BINARY)  # capacity of one
                         
     # add flow variables for target visit to cobra visit arcs
     for aid, a in g.arcs.items():
         if type(a) == dm.TargetVisitToCobraVisitArc:
-            addFlow(m, flows, a.id, 0, 1)
+            addFlow(m, flows, a.id, vtype=GRB.BINARY)
 
     # add flow variables for cobra visit to cobra arcs
     for cid, c in g.cobras.items():
         for arc in c.inarcs:
-            addFlow(m, flows, arc.id, 0, 1)
+            addFlow(m, flows, arc.id, vtype=GRB.BINARY)
             
             
     # Now add constraints: At every intermediate node, inflow (* gain) = outflow
@@ -204,7 +204,7 @@ def buildLPProblemGRB(g, name="MinCostFlowTest"):
                 if arc.endnode.id == "SINK":
                     addFlow(m, flows, arc.id, 0, 1e6)
                 else:
-                    addFlow(m, flows, arc.id, 0, 1)  # capacity of one
+                    addFlow(m, flows, arc.id, vtype=GRB.BINARY)  # capacity of one
 
     # add flow for overflow arcs from calibb. target nodes
     #  mF: eventually marry with loop above, keep separate for readibility now.
