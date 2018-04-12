@@ -141,7 +141,6 @@ def buildLPProblemGRB(g, name="MinCostFlowTest"):
 
     def addFlow(m, flows, n, l, u=GRB.INFINITY):
         f = m.addVar(vtype=GRB.INTEGER, name=n, lb=l, ub=u)
-        
         flows[n] = f
 
     # add flow variables for target class to target arcs

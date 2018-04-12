@@ -216,3 +216,89 @@ def plotTargetDistribution(ra, dec, types, pointings, target_fplane_pos, class_d
         plt.xlabel("x [mm]")
         plt.ylabel("y [mm]")
     f.tight_layout()
+    
+    
+    
+
+def filterFoV(xx,yy, maxx=20., maxy=20.):
+    ii  = xx >= -maxx
+    ii *= xx <=  maxx
+    ii *= yy >= -maxy
+    ii *= yy <=  maxy
+    return ii
+
+def my_circle_scatter(axes, x_array, y_array, radius, **kwargs):
+    for x, y, r in zip(x_array, y_array, radius):
+        circle = plt.Circle((x,y), radius=r, edgecolor='k', facecolor='grey', **kwargs)
+        axes.add_patch(circle)
+    return True
+
+def plotFP(cobras,dots,targets,maxx=20.,maxy=20.):
+    """
+    This plots the focal plane, with all the target positions at all
+    dither positions. Can take very long, shoudl only be done with a subset of the total 
+    targets.
+    """
+    f = plt.figure(figsize=[10,10])
+    ax = plt.subplot(1,1,1)
+    
+    # rearrange dot and cobra information for easy plotting
+    dxx = np.array( [d[0] for did, d in dots.items()] )
+    dyy = np.array( [d[1] for did, d in dots.items()] )
+    drr = np.array( [d[2] for did, d in dots.items()] )
+    ciddd = np.array( [did for did, d in dots.items()] )
+
+    cxx = np.array( [c[0] for cid, c in cobras.items()] )
+    cyy = np.array( [c[1] for cid, c in cobras.items()] )
+    ciddd = np.array( [cid for cid, t in cobras.items()] )
+    
+    # plot cobras
+    ii = filterFoV(cxx,cyy,maxx=maxx,maxy=maxy)
+    plt.plot(cxx[ii],cyy[ii],'.', c='orange')
+    ii = filterFoV(cxx,cyy )
+    for x,y,l in zip(cxx[ii],cyy[ii],ciddd[ii]):
+        plt.text(x,y,l)
+
+    # plot dots
+    ii = filterFoV(dxx,dyy,maxx=maxx,maxy=maxy)
+    my_circle_scatter(ax, dxx[ii],dyy[ii], drr[ii] )
+    
+
+    N = len(target_fplane_pos)
+    for i,pid in enumerate(target_fplane_pos):
+        alpha = 1. - float(i)/float( N )
+
+        # rearrange target information for easy plotting
+        txx = np.array( [t[0] for tid, t in target_fplane_pos[pid].items()] )
+        tyy = np.array( [t[1] for tid, t in target_fplane_pos[pid].items()] )
+        tiddd = np.array( [tid for tid, t in target_fplane_pos[pid].items()] )
+
+        # plot targets
+        ii = filterFoV(txx,tyy,maxx=maxx,maxy=maxy)
+        plt.plot(txx[ii],tyy[ii],'bo', alpha=alpha, label='pointing {}'.format(pid))
+
+        for x,y,l in zip(txx[ii],tyy[ii],tiddd[ii]):
+            plt.text(x,y,l, size=8)
+
+        # plot visibility arcs
+        if True:
+            for tid,cc in visibilities[pid].items():
+                tx,ty = target_fplane_pos[pid][tid]
+                for c in cc:
+                    cx,cy = cobras[c]
+                    #print c
+                    #plt.text(cx,cy,"{}".format(c) )
+                    plt.plot([cx,tx],[cy,ty],'k-', alpha=alpha)
+
+
+        
+            
+       #plt.text(zip(txx[ii],tyy[ii]),tiddd[ii], size=6)   
+
+    plt.axis('equal')
+    plt.xlim([-maxx,maxx])
+    plt.ylim([-maxy,maxy])
+    plt.legend()
+    
+    plt.xlabel("x [mm]")
+    plt.ylabel("y [mm]")

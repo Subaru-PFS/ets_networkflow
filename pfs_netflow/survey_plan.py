@@ -8,6 +8,9 @@ import pulp
 
 from astropy.table import Table, Column
 
+from scipy.spatial.distance import cdist
+import time
+
 from . import datamodel as dm
 
 
@@ -82,8 +85,8 @@ def buildSurveyPlan(cobras, targets, nreqv_dict, visibilities, class_dict,
             # Add costly overflow arc to the target class
             g.add_arc(dm.OverflowArc(targetClass.cost, targetClass, T))
         elif tc.startswith("cal_") or tc.startswith("sky_"):
-            for visit in g.visits:
-                targetClass = dm.CalTargetClass(tc, visit)
+            for pid in g.visits:
+                targetClass = dm.CalTargetClass(tc, pid)
                 targetClass.cost = cost_dict[tc]
                 targetClass.supply = supply_dict[tc]
                 g.add_node(targetClass)
@@ -198,7 +201,7 @@ def buildSurveyPlan(cobras, targets, nreqv_dict, visibilities, class_dict,
 
                     cv = g.cobraVisits[dm.CobraVisit.getID(cid, pid)]
                     a = dm.TargetVisitToCobraVisitArc(tv, cv)
-                    a.visit = visit
+                    a.visit = pid
 
                     cx, cy = g.cobras[cid2].fplane_pos[0], g.cobras[cid2].fplane_pos[1]
                     tx, ty = g.sciTargets[tid].fplane_positions[pid][0], g.sciTargets[tid].fplane_positions[pid][1]
@@ -239,6 +242,58 @@ def buildSurveyPlan(cobras, targets, nreqv_dict, visibilities, class_dict,
     return g
 
 
+def compute_collision_pairs(pointings, target_fplane_pos):
+    """
+    Compute which pairs of targets would lead to enpoint collision
+    if assigned simultanously for observation.
+    """
+
+    # find collision pairs
+    fiber_collision_radius = 1.
+
+    # I am sure this code cound be massively optimized by subdeviding the focal plane
+    # also we probably don't need to do this on a per-pointing basis.
+    collision_pairs = OrderedDict()
+
+
+    for pid,(pointing_RA,pointing_DEC) in pointings.items():
+        
+        start_time = time.time()
+        
+        targets = target_fplane_pos[pid]
+
+        txx = np.array( [t[0] for tid, t in targets.items()] )
+        tyy = np.array( [t[1] for tid, t in targets.items()] )
+        ID  = [tid for tid in targets] 
+        
+        N = len(ID)
+        points = list( zip(txx,tyy) )
+        Y = cdist( points[:N], points[:N] )
+
+        # any target separation that is smaller than 2 x the collision radius will be flagged a s collision
+        cc = Y <= (fiber_collision_radius*2.) 
+        ncoll = int( (np.sum(cc.flatten()) - N)/2. )
+
+        print ("Pointing {}: Found  {:d} collision pairs.".format( pid, ncoll  ))
+
+        # identify collision pairs
+        collision_pairs[pid] = []
+        # array of indices
+        ii = np.arange(N)
+        for i in range(cc.shape[0]):
+            x1,y1 =  txx[i], tyy[i]
+            # only iterate over the indeces that are colliding and the upper diagonal in the collision matrix
+            jj = ii[ cc[i,:] * ii > i ] 
+            for j in jj: 
+                if cc[i,j]:
+                    x2,y2 =  txx[j], tyy[j]
+                    collision_pairs[pid].append([(ID[i],x1,y1),(ID[j],x2,y2)])
+
+        time_to_finish = time.time() - start_time
+        print(" Time to completion: {:.2f} s".format(time_to_finish))
+        
+    return collision_pairs
+    
 
 def compute_collision_flow_pairs(g, collision_pairs):
     """
@@ -250,7 +305,7 @@ def compute_collision_flow_pairs(g, collision_pairs):
      Loop over all collision pairs (science - science, science - cal, cal - cal)
       then for each visit
       look if they are actually part of the graph (in case we are dealing with a 
-      subregaion of the focal plane only we might ignore them)
+      subregion of the focal plane only we might ignore them)
        identify the input flow arc (ther can be only one) for each of the two targets in the pair
        add the flow pairs to a list
      loop over all flow pairs and add a constraint equation
@@ -268,7 +323,7 @@ def compute_collision_flow_pairs(g, collision_pairs):
                 tvid2 = "T_{}_v{}".format(cp[1][0],visit)
 
                 # science targets have targetVisit nodes
-                # calibrations targets do not (there ais a doublicate for each visits)
+                # calibrations targets do not (there is a doublicate for each visits)
                 if tvid1 in g.calTargets:
                     f1id = g.calTargets[tvid1].inarcs[0].id
                 elif tvid1 in g.targetVisits:
@@ -286,6 +341,7 @@ def compute_collision_flow_pairs(g, collision_pairs):
 
                 flow_pairs.append([f1id, f2id])
     return flow_pairs
+
 
 
 
