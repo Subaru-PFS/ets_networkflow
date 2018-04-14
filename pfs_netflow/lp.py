@@ -243,3 +243,16 @@ def buildLPProblemGRB(g, name="MinCostFlowTest"):
     print(" Time to completion: {:.2f} s".format(time_to_finish))
     
     return m, flows, cost
+
+
+
+def setflows(m, g, flows):
+    """
+    Take the solution of the LP model and sets all the flows in the survey plan 
+    graph according to that solution.
+    """
+    flows_sol = m.getAttr('X', flows)
+    for a in g.arcs.values():
+        k = '{}={}'.format(a.startnode.id, a.endnode.id)
+        if k in flows_sol:
+            a.flow = flows_sol[k]

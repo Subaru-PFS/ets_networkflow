@@ -83,8 +83,6 @@ def compute_collision_flow_pairs(g, elbowPositions, fiber_collision_radius = 1.)
         ebyy = [ ebp[1] for ebp in elbowPositions[pid].values()]
         ebid = [ eid for eid in elbowPositions[pid]]
 
-
-
         xx = txx + ebxx
         yy = tyy + ebyy
         ID = tfid + ebid
@@ -123,7 +121,7 @@ def addCollisionFlowConstraints(model, flows, collision_flow_pairs):
     for fp in collision_flow_pairs:
         if fp[0] in flows and fp[1] in flows:
             i += 1
-            model.addConstr( quicksum( [ flows[ fp[0] ], flows[ fp[1] ] ] ) <= 1. )
+            model.addConstr( quicksum( [ flows[ fp[0] ], flows[ fp[1] ] ] ) <= 1. , "{}_OR_{}".format(fp[0],fp[1]))
         elif not fp[0] in flows:
             print("No flow variable for {}".format(fp[0]))
         elif not fp[1] in flows:
