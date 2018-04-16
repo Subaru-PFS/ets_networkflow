@@ -23,6 +23,7 @@ def solve(prob, maxSeconds=5, solver='COIN_CMD'):
 
 
 def buildLPProblem(g, name="MinCostFlowTest", cat='Integer'):
+   
     start_time = time.time()
 
     prob = pulp.LpProblem(name, pulp.LpMinimize)
@@ -39,19 +40,19 @@ def buildLPProblem(g, name="MinCostFlowTest", cat='Integer'):
                 addFlow(flows, arc.id, 0, 1e6)
             else:
                 addFlow(flows, arc.id, 0, 1)  # capacity of one
-                # target to target visit arcs
+                # target to target pointing arcs
                 for arc2 in arc.endnode.outarcs:
                     if arc2.endnode.id == "SINK":
                         addFlow(flows, arc2.id, 0, 1e6)
                     else:
                         addFlow(flows, arc2.id, 0, 1)  # capacity of one
 
-    # add flow variables for target visit to cobra visit arcs
+    # add flow variables for target pointing to cobra pointing arcs
     for aid, a in g.arcs.items():
-        if type(a) == dm.TargetVisitToCobraVisitArc:
+        if type(a) == dm.TargetPointingToCobraPointingArc:
             addFlow(flows, a.id, 0, 1)
 
-    # add flow variables for cobra visit to cobra arcs
+    # add flow variables for cobra pointing to cobra arcs
     for cid, c in g.cobras.items():
         for arc in c.inarcs:
             addFlow(flows, arc.id, 0, 1)
@@ -69,13 +70,13 @@ def buildLPProblem(g, name="MinCostFlowTest", cat='Integer'):
         prob += pulp.lpSum( [ flows[a.id] for a in t.inarcs]) * t.gain == \
             pulp.lpSum([ flows[a.id] for a in t.outarcs])
 
-    # target visit nodes
-    for tv in g.targetVisits.values():
+    # target pointing nodes
+    for tv in g.targetPointings.values():
             prob += pulp.lpSum([flows[a.id] for a in tv.inarcs]) == \
                 sum([flows[a.id] for a in tv.outarcs])
 
-    # cobra visit nodes
-    for cvid, cv in g.cobraVisits.items():
+    # cobra pointing nodes
+    for cvid, cv in g.cobraPointings.items():
         prob += pulp.lpSum([flows[a.id] for a in cv.inarcs]) == \
             pulp.lpSum([flows[a.id] for a in cv.outarcs])
 
@@ -116,8 +117,8 @@ def buildLPProblem(g, name="MinCostFlowTest", cat='Integer'):
     cost = pulp.LpVariable("cost", 0)
 
     prob += cost == pulp.lpSum([a.cost * flows[a.id] for a in g.overflowArcs.values()])\
-        + pulp.lpSum([a.cost * flows[a.id] for a in g.targetToTargetVisitArcs.values()]) \
-        + pulp.lpSum([a.cost * flows[a.id] for a in g.targetVisitToCobraVisitArcs.values()])
+        + pulp.lpSum([a.cost * flows[a.id] for a in g.targetToTargetPointingArcs.values()]) \
+        + pulp.lpSum([a.cost * flows[a.id] for a in g.targetPointingToCobraPointingArcs.values()])
 
     # This sets the cost as objective function for the optimisation.
     prob += cost
@@ -126,51 +127,132 @@ def buildLPProblem(g, name="MinCostFlowTest", cat='Integer'):
     return prob, flows, cost
 
 
-def computeStats(g, flows, cost):
-    stats = OrderedDict()
-
-    NSciObs = 0
-    NSciComplete = 0
-    NCalObs = np.nan
-    NCalComplete = np.nan
-    NVISITS = len(g.visits)
-
-    for t in g.sciTargets.values():
-        NSciObs += pulp.value(sum([flows[a.id] for a in t.inarcs]))
-        NSciComplete += int(sum([pulp.value(flows[a.id]) for a in t.outarcs]) == t.gain)
-            
-    Noverflow = 0
-    for tcid, tc in g.sciTargetClasses.items():
-        Noverflow += int( pulp.value(flows['{}=SINK'.format(tcid)]) )
-
-    Ncobras_used = 0
-    Ncobras_fully_used = 0
-    for c in g.cobras.values():
-        v = pulp.value(sum([flows[a.id] for a in c.inarcs]))
-        Ncobras_used += int(v > 0)
-        Ncobras_fully_used += int(v == NVISITS)
-        
-    stats['cost'] = pulp.value(cost)
-    stats['NSciObs'] = NSciObs
-    #stats['NCalObs'] = NCalObs
-    stats['NSciComplete'] = NSciComplete
-    #stats['NCalComplete'] = NCalComplete
-    stats['Noverflow'] = Noverflow
-    stats['Ncobras_used'] = Ncobras_used
-    stats['Ncobras_fully_used'] =  Ncobras_fully_used
+def buildLPProblemGRB(g, name="MinCostFlowTest"):
+    """
+    Build the LP problem using guropipy's native interface.
+    """
+    from gurobipy import Model, quicksum, GRB
     
+    start_time = time.time()
 
-    compl = {}
-    for stc in g.sciTargetClasses.values():
-        _NObs = 0
-        _NComplete = 0
-        for t in stc.targets.values(): 
-            _NObs += int( pulp.value(sum([flows[a.id] for a in t.inarcs])) )
-            _NComplete += int(sum([pulp.value(flows[a.id]) for a in t.outarcs]) == t.gain)
+    m = Model(name)
+
+    flows = {}
+
+    def addFlow(m, flows, n, l=0, u=GRB.INFINITY, vtype=GRB.INTEGER):
+        f = m.addVar(vtype=vtype, name=n, lb=l, ub=u)
+        flows[n] = f
+
+    # add flow variables for target class to target arcs
+    for tcid, tc in g.sciTargetClasses.items():
+        for arc in tc.outarcs:
+            if arc.endnode.id == "SINK":
+                addFlow(m, flows, arc.id, 0, 1e6)
+            else:
+                addFlow(m, flows, arc.id, vtype=GRB.BINARY)  # capacity of one
+                # target to target pointing arcs
+                for arc2 in arc.endnode.outarcs:
+                    if arc2.endnode.id == "SINK":
+                        addFlow(m, flows, arc2.id, 0, 1e6)
+                    else:
+                        addFlow(m, flows, arc2.id, vtype=GRB.BINARY)  # capacity of one
+                        
+    # add flow variables for target pointing to cobra pointing arcs
+    for aid, a in g.arcs.items():
+        if type(a) == dm.TargetPointingToCobraPointingArc:
+            addFlow(m, flows, a.id, vtype=GRB.BINARY)
+
+    # add flow variables for cobra pointing to cobra arcs
+    for cid, c in g.cobras.items():
+        for arc in c.inarcs:
+            addFlow(m, flows, arc.id, vtype=GRB.BINARY)
             
-        compl[stc.ID] = {'total' : len(stc.targets), 'observed' : _NObs, 'completed' : _NComplete}
+            
+    # Now add constraints: At every intermediate node, inflow (* gain) = outflow
+    for tcid, tc in g.sciTargetClasses.items():
+        # for now set supply equal to number of targets in that target
+        # class, i.e. Ideally we get them all observed.
+        # If it is sufficient to observe a subset (i.e. N out of M) then this needs to be modified.
+        S = tc.supply
+        m.addConstr( quicksum([flows[a.id] for a in tc.outarcs]) == S )
+
+    # target nodes
+    for tid, t in g.sciTargets.items():
+        m.addConstr( quicksum( [ flows[a.id] for a in t.inarcs]) * t.gain == \
+                     quicksum( [ flows[a.id] for a in t.outarcs])\
+                   )
+
+    # target pointing nodes
+    for tv in g.targetPointings.values():
+            m.addConstr( quicksum([flows[a.id] for a in tv.inarcs]) == \
+                         quicksum([flows[a.id] for a in tv.outarcs])\
+                       )
+
+            
+    # cobra pointing nodes
+    for cvid, cv in g.cobraPointings.items():
+        m.addConstr( quicksum([flows[a.id] for a in cv.inarcs]) == \
+                     quicksum([flows[a.id] for a in cv.outarcs])\
+                   )
+
+    # for calibration targets
+    INCLUDE_CALIB = True
+    if INCLUDE_CALIB:
+        # add flow variables for calib. target class to target arcs
+        for tcid, tc in g.calTargetClasses.items():
+            for arc in tc.outarcs:
+                if arc.endnode.id == "SINK":
+                    addFlow(m, flows, arc.id, 0, 1e6)
+                else:
+                    addFlow(m, flows, arc.id, vtype=GRB.BINARY)  # capacity of one
+
+    # add flow for overflow arcs from calibb. target nodes
+    #  mF: eventually marry with loop above, keep separate for readibility now.
+    # for tid,t in g.calTargets.iteritems():
+    #    addFlow(flows, "{}=SINK".format(tid),0,1e6)
+
+    # Now add constraints: At every intermediate node, inflow (* gain) = outflow
+    for tcid, tc in g.calTargetClasses.items():
+        # for now set supply equal to number of targets in that target
+        # class, i.e. Ideally we get them all observed.
+        # If it is sufficient to observe a subset (i.e. N out of M) then this needs to be modified.
+        S = tc.supply
+        m.addConstr( quicksum([flows[a.id] for a in tc.outarcs]) == S )
+
+    # target nodes
+    for tid, t in g.calTargets.items():
+        m.addConstr( quicksum([flows[a.id] for a in t.inarcs]) * t.gain == \
+                     quicksum([flows[a.id] for a in t.outarcs])\
+                   )
+        
+    print("Building cost equation ...")
+    # attribute cost to the flows along the overflow arcs
+    # Cost occurs in two ways for now, either by
+    # flow occuring from a targetClass to the sink node (targets do not get observed at all)
+    # or flow from a trget node to the sink node (target was only partially observed)
+    cost = m.addVar(vtype=GRB.CONTINUOUS, name="cost")
+
+    m.addConstr( cost == quicksum([a.cost * flows[a.id] for a in g.overflowArcs.values()])\
+        + quicksum([a.cost * flows[a.id] for a in g.targetToTargetPointingArcs.values()]) \
+        + quicksum([a.cost * flows[a.id] for a in g.targetPointingToCobraPointingArcs.values()])
+               )
+    
+    # This sets the cost as objective function for the optimisation.
+    m.setObjective(cost, GRB.MINIMIZE)
+    time_to_finish = time.time() - start_time
+    print(" Time to completion: {:.2f} s".format(time_to_finish))
+    
+    return m, flows, cost
 
 
-    stats['completion'] = compl
 
-    return stats
+def setflows(m, g, flows):
+    """
+    Take the solution of the LP model and sets all the flows in the survey plan 
+    graph according to that solution.
+    """
+    flows_sol = m.getAttr('X', flows)
+    for a in g.arcs.values():
+        k = '{}={}'.format(a.startnode.id, a.endnode.id)
+        if k in flows_sol:
+            a.flow = flows_sol[k]

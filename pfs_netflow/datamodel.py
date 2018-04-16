@@ -2,8 +2,12 @@ from builtins import object
 # # Datamodel for the flow network
 
 from collections import OrderedDict
-from numpy import inf
+from numpy import inf, nan
 
+#class FocalPlanePos(object):
+#    def __init__(self, x,y):
+#        self.x = x
+#        self.y = y
 
 class NetworkElement(object):
     def __init__(self):
@@ -20,7 +24,13 @@ class Node(NetworkElement):
         self.inarcs = []
         self.outarcs = []
         self.supply = 0
-
+        self.fplane_pos = (nan,nan)
+        
+    def getX(self, pid):
+        return self.fplane_pos[0]
+        
+    def getY(self, pid):
+        return self.fplane_pos[1]
 
 class Sink(Node):
     def __init__(self):
@@ -32,22 +42,27 @@ class Cobra(Node):
     def getID(cid):
         return "C_{}".format(cid)
 
-    def __init__(self, cid, x, y):
+    def __init__(self, cid, fplane_pos):
         super(Cobra, self).__init__(self.getID(cid))
-        self.x = x
-        self.y = y
+        self.fplane_pos = fplane_pos
+        
+    def getX(self, pid):
+        return self.fplane_pos[0]
+        
+    def getY(self, pid):
+        return self.fplane_pos[1]
 
 
-class CobraVisit(Node):
+class CobraPointing(Node):
     @staticmethod
-    def getID(cid, visit):
-        return "C_{}_v{}".format(cid, visit)
+    def getID(cid, pointing):
+        return "C_{}_v{}".format(cid, pointing)
 
-    def __init__(self, cid, cobra, visit):
-        super(CobraVisit, self).__init__(self.getID(cid, visit))
-        self.visit = visit
+    def __init__(self, cid, cobra, pointing):
+        super(CobraPointing, self).__init__(self.getID(cid, pointing))
+        self.pointing = pointing
         self.cobra = cobra
-
+      
 
 class Network(object):
     """
@@ -72,38 +87,38 @@ class SurveyPlan(Network):
         # These are just handy for quick access to a certain type of
         # node or arc nodes
         self.cobras = OrderedDict()
-        self.cobraVisits = OrderedDict()
+        self.cobraPointings = OrderedDict()
         self.targets = {}
         self.calTargets = OrderedDict()
         self.sciTargets = OrderedDict()
-        self.targetVisits = OrderedDict()
+        self.targetPointings = OrderedDict()
         self.calTargetClasses = OrderedDict()
         self.sciTargetClasses = OrderedDict()
         self.sinks = OrderedDict()
         # arcs
         self.targetClassToTargetArcs = OrderedDict()
-        self.targetToTargetVisitArcs = OrderedDict()
-        self.targetVisitToCobraVisitArcs = OrderedDict()
-        self.cobraVisitToCobraArcs = OrderedDict()
+        self.targetToTargetPointingArcs = OrderedDict()
+        self.targetPointingToCobraPointingArcs = OrderedDict()
+        self.cobraPointingToCobraArcs = OrderedDict()
         self.cobraToSinkArcs = OrderedDict()
-        self.cobraVisitToCobraArcs = OrderedDict()
+        self.cobraPointingToCobraArcs = OrderedDict()
         self.overflowArcs = OrderedDict()
 
     def add_node(self, node):
         super(SurveyPlan, self).add_node(node)
         if type(node) == Cobra:
             self.cobras[node.id] = node
-        elif type(node) == CobraVisit:
-            self.cobraVisits[node.id] = node
-        elif type(node) == CalTarget:
+        elif type(node) == CobraPointing:
+            self.cobraPointings[node.id] = node
+        elif type(node) == CalTarget or type(node) == StarCalTarget or type(node) == SkyCalTarget:
             self.calTargets[node.id] = node
             self.targets[node.id] = node
         elif type(node) == SciTarget:
             self.sciTargets[node.id] = node
             self.targets[node.id] = node
-        elif type(node) == TargetVisit:
-            self.targets[node.target.id].targetVisits[node.visit] = node
-            self.targetVisits[node.id] = node
+        elif type(node) == TargetPointing:
+            self.targets[node.target.id].targetPointings[node.pointing] = node
+            self.targetPointings[node.id] = node
         elif type(node) == TargetClass:
             self.targetClasses[node.id] = node
         elif type(node) == CalTargetClass:
@@ -122,16 +137,16 @@ class SurveyPlan(Network):
         super(SurveyPlan, self).add_arc(arc)
         if type(arc) == TargetClassToTargetArc:
             self.targetClassToTargetArcs[arc.id] = arc
-        elif type(arc) == TargetToTargetVisitArc:
-            self.targetToTargetVisitArcs[arc.id] = arc
-        elif type(arc) == TargetVisitToCobraVisitArc:
-            self.targetVisitToCobraVisitArcs[arc.id] = arc
-        elif type(arc) == CobraVisitToCobraArc:
-            self.cobraVisitToCobraArcs[arc.id] = arc
+        elif type(arc) == TargetToTargetPointingArc:
+            self.targetToTargetPointingArcs[arc.id] = arc
+        elif type(arc) == TargetPointingToCobraPointingArc:
+            self.targetPointingToCobraPointingArcs[arc.id] = arc
+        elif type(arc) == CobraPointingToCobraArc:
+            self.cobraPointingToCobraArcs[arc.id] = arc
         elif type(arc) == CobraToSinkArc:
             self.cobraToSinkArcs[arc.id] = arc
-        elif type(arc) == CobraVisitToCobraArc:
-            self.cobraVisitToCobraArcs[arc.id] = arc
+        elif type(arc) == CobraPointingToCobraArc:
+            self.cobraPointingToCobraArcs[arc.id] = arc
         elif type(arc) == OverflowArc:
             self.overflowArcs[arc.id] = arc
         else:
@@ -155,21 +170,21 @@ class TargetClassToTargetArc(Arc):
         super(TargetClassToTargetArc, self).__init__(startnode, endnode)
 
 
-class TargetToTargetVisitArc(Arc):
+class TargetToTargetPointingArc(Arc):
     def __init__(self, startnode, endnode):
-        super(TargetToTargetVisitArc, self).__init__(startnode, endnode)
+        super(TargetToTargetPointingArc, self).__init__(startnode, endnode)
 
 
-class TargetVisitToCobraVisitArc(Arc):
+class TargetPointingToCobraPointingArc(Arc):
     def __init__(self, startnode, endnode):
-        super(TargetVisitToCobraVisitArc, self).__init__(startnode, endnode)
+        super(TargetPointingToCobraPointingArc, self).__init__(startnode, endnode)
         self.d = None  # Distance from target to cobra in mm.
-        self.visit = None
+        self.pointing = None
 
 
-class CobraVisitToCobraArc(Arc):
+class CobraPointingToCobraArc(Arc):
     def __init__(self, startnode, endnode):
-        super(CobraVisitToCobraArc, self).__init__(startnode, endnode)
+        super(CobraPointingToCobraArc, self).__init__(startnode, endnode)
 
 
 class CobraToSinkArc(Arc):
@@ -205,12 +220,12 @@ class TargetClass(Node):
 
 class CalTargetClass(TargetClass):
     @staticmethod
-    def getID(tc, visit):
-        return "TClass_{}_v{}".format(tc, visit)
+    def getID(tc, pointing):
+        return "TClass_{}_v{}".format(tc, pointing)
 
-    def __init__(self, tc, visit):
-        super(CalTargetClass, self).__init__(self.getID(tc, visit))
-        self.visit = None
+    def __init__(self, tc, pointing):
+        super(CalTargetClass, self).__init__(self.getID(tc, pointing))
+        self.pointing = None
 
 
 class SciTargetClass(TargetClass):
@@ -227,45 +242,66 @@ class SciTargetClass(TargetClass):
 
 
 class Target(Node):
-    def __init__(self, id, x, y, gain=3):
+    def __init__(self, id, fplane_positions, gain=3):
         super(Target, self).__init__(id)
-        self.x = x
-        self.y = y
+        self.fplane_positions = fplane_positions
         self.gain = gain  # number of required exposures
         self.collision_group = None
-        self.targetVisits = {}
+        self.targetPointings = {}
+        self.target_class = None
 
-
+    def getX(self, pid):
+        return self.fplane_positions[pid][0]
+        
+    def getY(self, pid):
+        return self.fplane_positions[pid][1]
+    
 class SciTarget(Target):
     @staticmethod
     def getID(tid):
         return "T_{}".format(tid)
 
-    def __init__(self, tid, x, y, gain=3):
-        super(SciTarget, self).__init__(self.getID(tid), x, y, gain)
+    def __init__(self, tid, fplane_positions, gain=3):
+        super(SciTarget, self).__init__(self.getID(tid), fplane_positions, gain)
 
 
 class CalTarget(Target):
     """
     Calibration targets are different in the sense that they can be reobserved
-    an arbitrary number of times while their required number of visits
+    an arbitrary number of times while their required number of pointings
     is always one. A reobservation will therefore never be enforced.
     """
     @staticmethod
-    def getID(tid, visit):
-        return "T_{}_v{}".format(tid, visit)
+    def getID(tid, pointing):
+        return "T_{}_v{}".format(tid, pointing)
 
-    def __init__(self, tid, x, y, visit, gain=3):
-        super(CalTarget, self).__init__(self.getID(tid, visit), x, y, gain)
-        self.visit = visit
+    def __init__(self, tid, fplane_positions, pointing, gain=3):
+        super(CalTarget, self).__init__(self.getID(tid, pointing), fplane_positions, gain)
+        self.pointing = pointing
+
+class SkyCalTarget(CalTarget):
+    """
+    Really the same functionality as CalTarget, but help later discrimination.
+    """
+    def __init__(self, tid, fplane_positions, pointing, gain=3):
+        super(SkyCalTarget, self).__init__(tid, fplane_positions, pointing, gain)
+        self.pointing = pointing
+
+class StarCalTarget(CalTarget):
+    """
+    Really the same functionality as CalTarget, but help later discrimination.
+    """
+    def __init__(self, tid, fplane_positions, pointing, gain=3):
+        super(StarCalTarget, self).__init__(tid, fplane_positions, pointing, gain)
+        self.pointing = pointing
 
 
-class TargetVisit(Node):
+class TargetPointing(Node):
     @staticmethod
-    def getID(tid, visit):
-        return "T_{}_v{}".format(tid, visit)
+    def getID(tid, pointing):
+        return "T_{}_v{}".format(tid, pointing)
 
-    def __init__(self, tid, target, visit):
-        super(TargetVisit, self).__init__(self.getID(tid, visit))
-        self.visit = visit
+    def __init__(self, tid, target, pointing):
+        super(TargetPointing, self).__init__(self.getID(tid, pointing))
+        self.pointing = pointing
         self.target = target
