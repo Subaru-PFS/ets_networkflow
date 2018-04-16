@@ -12,7 +12,7 @@ def _get_visibility(cobras, tpos):
     return pyETS.getVis(tpos, cbr)
 
 
-def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None):
+def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None, gurobi=False):
     Cv_i = defaultdict(list)  # Cobra visit inflows
     Tv_o = defaultdict(list)  # Target visit outflows
     Tv_i = defaultdict(list)  # Target visit inflows
@@ -20,8 +20,18 @@ def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None):
     T_i = defaultdict(list)  # Target inflows (only science targets)
     CTCv_o = defaultdict(list)  # Calibration Target class visit outflows
     STC_o = defaultdict(list)  # Science Target outflows
-    prob = pulp.LpProblem("problem", pulp.LpMinimize)
-    cost = pulp.LpVariable("cost", 0)
+    if gurobi:
+        import gurobipy as gbp
+        prob = gbp.Model("problem")
+        lpSum = gbp.quicksum
+        def add_constraint(problem, constraint):
+            problem.addConstr(constraint)
+    else:
+        prob = pulp.LpProblem("problem", pulp.LpMinimize)
+        cost = pulp.LpVariable("cost", 0)
+        lpSum = pulp.lpSum
+        def add_constraint(problem, constraint):
+            problem += constraint
 
     nreqvisit = []
     for t in targets:
@@ -38,8 +48,14 @@ def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None):
 
     def newvar(lo, hi):
         newvar._varcount += 1
-        return pulp.LpVariable("v{}".format(newvar._varcount), lo, hi,
-                               cat=pulp.LpInteger)
+        if gurobi:
+            if lo == 0 and hi == 1:
+               return prob.addVar(vtype=gbp.GRB.BINARY, name="v{}".format(newvar._varcount))
+            else:
+               return prob.addVar(vtype=gbp.GRB.INTEGER, name="v{}".format(newvar._varcount), lb=lo, ub=hi)
+        else:
+            return pulp.LpVariable("v{}".format(newvar._varcount), lo, hi,
+                                   cat=pulp.LpInteger)
     newvar._varcount = 0
 
     # define LP variables
@@ -95,31 +111,34 @@ def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None):
 
     # every Cobra can observe at most one target per visit
     for inflow in Cv_i.values():
-        prob += pulp.lpSum([f for f in inflow]) <= 1
+        add_constraint(prob, lpSum([f for f in inflow]) <= 1)
 
     # every calibration target class must be observed a minimum number of times
     # every visit
     for key, value in CTCv_o.items():
-        prob += pulp.lpSum([v for v in value]) >= \
-                classdict[key[0]]["numRequired"]
+        add_constraint(prob, lpSum([v for v in value]) >= \
+                classdict[key[0]]["numRequired"])
 
     # inflow and outflow at every Tv node must be balanced
     for key, ival in Tv_i.items():
         oval = Tv_o[key]
-        prob += pulp.lpSum([v for v in ival]+[-v[0] for v in oval]) == 0
+        add_constraint(prob, lpSum([v for v in ival]+[-v[0] for v in oval]) == 0)
 
     # inflow and outflow at every T node must be balanced
     for key, ival in T_i.items():
         oval = T_o[key]
         nvis = nreqvisit[key]
-        prob += pulp.lpSum([nvis*v for v in ival]+[-v for v in oval]) == 0
+        add_constraint(prob, lpSum([nvis*v for v in ival]+[-v for v in oval]) == 0)
 
     # Science targets must be either observed or go to the sink
     for key, val in STC_o.items():
-        prob += pulp.lpSum([v for v in val]) == len(val)-1
+        add_constraint(prob, lpSum([v for v in val]) == len(val)-1)
 
-    status = prob.solve(pulp.COIN_CMD(msg=1, keepFiles=0, maxSeconds=100,
-                                      threads=1, dual=10.))
+    if gurobi:
+        status = prob.solve(pulp.GUROBI(msg=1))
+    else:
+        status = prob.solve(pulp.COIN_CMD(msg=1, keepFiles=0, maxSeconds=100,
+                                          threads=1, dual=10.))
 
     res = [{} for _ in range(nvisits)]
     for k1, v1 in Tv_o.items():
