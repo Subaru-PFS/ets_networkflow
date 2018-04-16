@@ -2,7 +2,6 @@ import numpy as np
 import pycconv
 import pyETS
 from collections import OrderedDict, defaultdict
-import pulp
 
 
 def _get_visibility(cobras, tpos):
@@ -26,12 +25,17 @@ def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None, guro
         lpSum = gbp.quicksum
         def add_constraint(problem, constraint):
             problem.addConstr(constraint)
+        def varValue(var):
+            return var.X
     else:
+        import pulp
         prob = pulp.LpProblem("problem", pulp.LpMinimize)
         cost = pulp.LpVariable("cost", 0)
         lpSum = pulp.lpSum
         def add_constraint(problem, constraint):
             problem += constraint
+        def varValue(var):
+            return pulp.value(var)
 
     nreqvisit = []
     for t in targets:
@@ -135,7 +139,8 @@ def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None, guro
         add_constraint(prob, lpSum([v for v in val]) == len(val)-1)
 
     if gurobi:
-        status = prob.solve(pulp.GUROBI(msg=1))
+        prob.ModelSense = 1  # minimize
+        model.optimize()
     else:
         status = prob.solve(pulp.COIN_CMD(msg=1, keepFiles=0, maxSeconds=100,
                                           threads=1, dual=10.))
@@ -143,7 +148,7 @@ def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None, guro
     res = [{} for _ in range(nvisits)]
     for k1, v1 in Tv_o.items():
         for i2 in v1:
-            visited = pulp.value(i2[0]) > 0
+            visited = varValue(i2[0]) > 0
             if visited:
                 tidx, ivis = k1
                 cidx = i2[1]
