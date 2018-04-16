@@ -87,6 +87,8 @@ def plot_assignment(cobras,targets,tpos,res):
     ax.set_xlim([limits.xmin, limits.xmax])
     plt.show()
 
+np.random.seed(20)
+
 # define locations of the input files
 catalog_path = "/home/martin/codes/ets_fiber_assigner/pfs_target_list"
 fscience_targets = catalog_path+"/pfs_preliminary_target_cosmology.dat"
@@ -130,7 +132,9 @@ classdict["sci_P7"] = {"nonObservationCost": 40, "partialObservationCost": 1e9}
 classdict["sky"] = {"numRequired": 2}
 classdict["cal"] = {"numRequired": 1}
 
-res = dm.observeWithNetflow(telescopes[0].Cobras, tgt, tpos, classdict, 300.)
+vis_cost = [0.1*i for i in range(nvisit)]
+
+res = dm.observeWithNetflow(telescopes[0].Cobras, tgt, tpos, classdict, 300., vis_cost)
 print (len(res))
 for vis, tp in zip(res,tpos):
     plot_assignment(cobras, tgt, tp, vis)

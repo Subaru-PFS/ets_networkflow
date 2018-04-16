@@ -12,7 +12,7 @@ def _get_visibility(cobras, tpos):
     return pyETS.getVis(tpos, cbr)
 
 
-def _build_network(cobras, targets, tpos, classdict, tvisit):
+def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None):
     Cv_i = defaultdict(list)  # Cobra visit inflows
     Tv_o = defaultdict(list)  # Target visit outflows
     Tv_i = defaultdict(list)  # Target visit inflows
@@ -32,6 +32,9 @@ def _build_network(cobras, targets, tpos, classdict, tvisit):
 
     vis = [_get_visibility(cobras, tp) for tp in tpos]
     nvisits = len(vis)
+
+    if vis_cost is None:
+        vis_cost = [0.]*nvisits
 
     def newvar(lo, hi):
         newvar._varcount += 1
@@ -74,7 +77,7 @@ def _build_network(cobras, targets, tpos, classdict, tvisit):
                 f = newvar(0, 1)
                 Cv_i[(cidx, ivis)].append(f)
                 Tv_o[(tidx, ivis)].append((f, cidx))
-                cost += 0.1*f*ivis
+                cost += f*vis_cost[ivis]
 
     # Cost function
     prob += cost
@@ -119,8 +122,8 @@ def _build_network(cobras, targets, tpos, classdict, tvisit):
                 res[ivis][tidx] = cidx
     return res
 
-def observeWithNetflow(cbr, tgt, tpos, classdict, tvisit):
-    return _build_network(cbr, tgt, tpos, classdict, tvisit)
+def observeWithNetflow(cbr, tgt, tpos, classdict, tvisit, vis_cost=None):
+    return _build_network(cbr, tgt, tpos, classdict, tvisit, vis_cost)
 
 
 class Cobra(object):
@@ -213,10 +216,10 @@ class Telescope(object):
         return [t.fp_position(self._ra, self._dec, self._posang, self._time)
                 for t in tgt]
 
-    def observeWithNetflow(self, tgt, classdict, nvisit, tvisit):
-        for t in tgt:
-            t.calc_position(self._ra, self._dec, self._posang, self._time)
-        return _build_network(self._Cobras, tgt, classdict, nvisit, tvisit)
+#    def observeWithNetflow(self, tgt, classdict, nvisit, tvisit, vis_cost=None):
+#        for t in tgt:
+#            t.calc_position(self._ra, self._dec, self._posang, self._time)
+#        return _build_network(self._Cobras, tgt, classdict, nvisit, tvisit, vis_cost)
 
 
 class Target(object):
