@@ -68,8 +68,8 @@ def plotSurveyPlan(g, name="", PLOTSCI=True, PLOTCAL=True, LABELFLOWS=False, ALT
         ax = plt.subplot(111)  # note we must use plt.subplots, not plt.subplot
         allnodes = []  # keep track of nodes actually contained in the plot
         plotNodes(ax, nodes=g.cobras, x=0.9, label="cobras", color="#19967d", allnodes=allnodes)
-        plotNodes(ax, nodes=g.cobraVisits, x=0.7, label="cobras\nvisits", color="#99d5ca", allnodes=allnodes)
-        plotNodes(ax, nodes=g.targetVisits, x=0.5, label="target\nvisits", color="#ffbbb1", allnodes=allnodes)
+        plotNodes(ax, nodes=g.cobraPointings, x=0.7, label="cobras\npointings", color="#99d5ca", allnodes=allnodes)
+        plotNodes(ax, nodes=g.targetPointings, x=0.5, label="target\npointings", color="#ffbbb1", allnodes=allnodes)
         plotNodes(ax, nodes=g.sciTargets, x=0.3, label="science\ntargets", color="#ff8f80", allnodes=allnodes)
         plotNodes(ax, nodes=g.sciTargetClasses, x=0.1, label="science\ntarget\nclasses", color="#c92d39", allnodes=allnodes)
         plotArcs(ax, g, allnodes, LABELFLOWS, ALTLABELS)
@@ -84,7 +84,7 @@ def plotSurveyPlan(g, name="", PLOTSCI=True, PLOTCAL=True, LABELFLOWS=False, ALT
         ax = plt.subplot(111)  # note we must use plt.subplots, not plt.subplot
         allnodes = []
         plotNodes(ax, nodes=g.cobras, x=0.9, label="cobras", color="#19967d", allnodes=allnodes)
-        plotNodes(ax, nodes=g.cobraVisits, x=0.7, label="cobras\nvisits", color="#99d5ca", allnodes=allnodes)
+        plotNodes(ax, nodes=g.cobraPointings, x=0.7, label="cobras\npointings", color="#99d5ca", allnodes=allnodes)
         if len(g.calTargets) > 0:
             plotNodes(ax, nodes=g.calTargets, x=0.4, label="calib\ntargets", color="#ffeca9", allnodes=allnodes)
         if len(g.calTargetClasses) > 0:
@@ -124,12 +124,12 @@ def plotFocalPlane(g, pid, summary="", XC=0., YC=0., W=400., name="", figsize=[1
             else:
                 alpha = .2
 
-            if type(n2) == dm.CobraVisit and n2.visit == pid and type(n1) == dm.TargetVisit:
+            if type(n2) == dm.CobraPointing and n2.pointing == pid and type(n1) == dm.TargetPointing:
                     x, y = np.array([[n1.target.getX(pid), n2.cobra.getX(pid)], [n1.target.getY(pid), n2.cobra.getY(pid)]])
 
                     line = mlines.Line2D(x, y, lw=1, alpha=alpha, zorder=10)
                     ax.add_line(line)
-            if type(n2) == dm.CobraVisit and n2.visit == pid and type(n1) == dm.CalTarget:
+            if type(n2) == dm.CobraPointing and n2.pointing == pid and type(n1) == dm.CalTarget:
                     x, y = np.array([[n1.getX(pid), n2.cobra.getX(pid)], [n1.getY(pid), n2.cobra.getY(pid)]])
 
                     line = mlines.Line2D(x, y, lw=1, alpha=alpha, zorder=10)
@@ -149,7 +149,7 @@ def plotFocalPlane(g, pid, summary="", XC=0., YC=0., W=400., name="", figsize=[1
     #plt.axis('off')
     plt.text(-0.1, -0.1, summary, ha='left', va='bottom', transform=ax.transAxes, fontsize=8)
     plt.text(0.5, 1.0, "pointing {}".format(pid), ha='center', va='top', transform=ax.transAxes)
-    plt.savefig("{}_visit{}_fp.pdf".format(name, pid))
+    plt.savefig("{}_pointing{}_fp.pdf".format(name, pid))
 
     
 def plotTargetDistribution(ra, dec, types, pointings, target_fplane_pos, class_dict):

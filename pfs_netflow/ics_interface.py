@@ -56,7 +56,7 @@ def compute_collision_flow_pairs(g, elbowPositions, fiber_collision_radius = 1.)
     print("Finding fiber-fiber, fiber-elbow, and elbow-elbow collisions ...")
     collision_flow_pairs  = []
 
-    for pid in g.visits:
+    for pid in g.pointings:
 
         # target x/y positions
         txx  =  [t.getX(pid) for tid, t in g.targets.items()] 

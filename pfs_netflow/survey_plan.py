@@ -23,7 +23,7 @@ def buildSurveyPlan(cobras, targets, nreqv_dict, visibilities, class_dict,
     Args:
         cobras (OrderedDict): A dictionary of cobra x,y in the focal plane. The key is the cobra ID.
         targets (OrderedDict): A dictionary of target x,y in the focal plane. The key is the target ID.
-        nreqv_dict (OrderedDict): Number of required visits per target. The key is the target ID, elements are int.
+        nreqv_dict (OrderedDict): Number of required pointings per target. The key is the target ID, elements are int.
         visibilities (OrderedDict): Dictionary describing which target can be observed by which cobra. This is
                                     a dictionary of dictionaries, one for each pointing. 
         class_dict (OrderedDict): Dictionary to which specifies the target class per target ID.
@@ -51,13 +51,13 @@ def buildSurveyPlan(cobras, targets, nreqv_dict, visibilities, class_dict,
 
     # generate a directed graph
     g = dm.SurveyPlan()
-    g.visits = list(visibilities)
+    g.pointings = list(visibilities)
 
     # Add global sink node
     T = dm.Sink()
     g.add_node(T)
 
-    # Add nodes for the cobras and the cobra visits and arcs between them
+    # Add nodes for the cobras and the cobra pointings and arcs between them
     for cid in cobras:
         x, y = cobras[cid]
         if (x-CENTER[0])**2 + (y-CENTER[1])**2 > RMAX**2:
@@ -66,11 +66,11 @@ def buildSurveyPlan(cobras, targets, nreqv_dict, visibilities, class_dict,
             continue
         c = dm.Cobra(cid, fplane_pos=(x,y))
         g.add_node(c)
-        # replicate node as many times as there are visits
+        # replicate node as many times as there are pointings
         for pid in visibilities:
-            cv = dm.CobraVisit(cid=cid, cobra=c, visit=pid)
+            cv = dm.CobraPointing(cid=cid, cobra=c, pointing=pid)
             g.add_node(cv)
-            g.add_arc(dm.CobraVisitToCobraArc(cv, c))
+            g.add_arc(dm.CobraPointingToCobraArc(cv, c))
 
     # Add nodes for target classes
     for tc in np.unique(list(class_dict.values())):
@@ -85,7 +85,7 @@ def buildSurveyPlan(cobras, targets, nreqv_dict, visibilities, class_dict,
             # Add costly overflow arc to the target class
             g.add_arc(dm.OverflowArc(targetClass.cost, targetClass, T))
         elif tc.startswith("cal_") or tc.startswith("sky_"):
-            for pid in g.visits:
+            for pid in g.pointings:
                 targetClass = dm.CalTargetClass(tc, pid)
                 targetClass.cost = cost_dict[tc]
                 targetClass.supply = supply_dict[tc]
@@ -97,7 +97,7 @@ def buildSurveyPlan(cobras, targets, nreqv_dict, visibilities, class_dict,
             print("Error unknown target class {}".format(tc))
 
 
-    # Add nodes for the targets and the target visits and arcs between them
+    # Add nodes for the targets and the target pointings and arcs between them
     for tid in targets:
         tc = class_dict[tid]
         fplane_positions = targets[tid]
@@ -114,15 +114,15 @@ def buildSurveyPlan(cobras, targets, nreqv_dict, visibilities, class_dict,
             t.gain = nrv
             g.add_node(t)
             
-            # Add as many TargetVisit nodes for this target as there are visits
+            # Add as many TargetPointing nodes for this target as there are pointings
             for pid in visibilities:
-                tv = dm.TargetVisit(tid, target=t, visit=pid)
+                tv = dm.TargetPointing(tid, target=t, pointing=pid)
                 g.add_node(tv)
-                ttva = dm.TargetToTargetVisitArc(t, tv)
-                # Here we assign the cost for the respective visit
-                # increasing the cost for later visits encourages
+                ttva = dm.TargetToTargetPointingArc(t, tv)
+                # Here we assign the cost for the respective pointing
+                # increasing the cost for later pointings encourages
                 # earlier observation.
-                ttva.cost = cost_dict["visits"][pid]
+                ttva.cost = cost_dict["pointings"][pid]
                 g.add_arc(ttva)
 
             # Add arc from target class to target
@@ -135,12 +135,12 @@ def buildSurveyPlan(cobras, targets, nreqv_dict, visibilities, class_dict,
 
         elif tc.startswith("cal_") or tc.startswith("sky_"):
             for pid in visibilities:
-                # Add as many nodes for each calibration target as there are visits
+                # Add as many nodes for each calibration target as there are pointings
                 if tc.startswith("cal_"):
-                    t = dm.StarCalTarget(tid, fplane_positions=fplane_positions, visit=pid)
+                    t = dm.StarCalTarget(tid, fplane_positions=fplane_positions, pointing=pid)
                 else:
-                    t = dm.SkyCalTarget(tid, fplane_positions=fplane_positions, visit=pid)
-                #t = dm.CalTarget(tid, fplane_positions=fplane_positions, visit=pid)
+                    t = dm.SkyCalTarget(tid, fplane_positions=fplane_positions, pointing=pid)
+                #t = dm.CalTarget(tid, fplane_positions=fplane_positions, pointing=pid)
                 t.target_class = tc
                 t.gain = 1
                 g.add_node(t)
@@ -169,7 +169,7 @@ def buildSurveyPlan(cobras, targets, nreqv_dict, visibilities, class_dict,
         if targetClass.supply == np.inf:
             targetClass.supply = len(targetClass.targets)
 
-    for visit,pid in enumerate(visibilities):
+    for pointing,pid in enumerate(visibilities):
         # Add arcs corresponding to the visibilities, i.e.
         # to which cobra can observe which target in which exposure
         for id in visibilities[pid]:
@@ -186,22 +186,22 @@ def buildSurveyPlan(cobras, targets, nreqv_dict, visibilities, class_dict,
                 # bail out if we didn't include use this target
                 if tid not in g.sciTargets:
                     continue
-                # For science targets we need to add edges between cobra visits and target visits.
-                # So for each visit, link all cobras that can reach
+                # For science targets we need to add edges between cobra pointings and target pointings.
+                # So for each pointing, link all cobras that can reach
                 # a specific target to that target.
 
-                tvid = dm.TargetVisit.getID(id, pid)
-                #tvid = "{}_v{}".format(tid, visit)
-                tv = g.targetVisits[tvid]
+                tvid = dm.TargetPointing.getID(id, pid)
+                #tvid = "{}_v{}".format(tid, pointing)
+                tv = g.targetPointings[tvid]
                 for cid in cobra_ids:
                     cid2 = dm.Cobra.getID(cid)
                     # bail out if we didn't include use this cobra
                     if cid2 not in g.cobras:
                         continue
 
-                    cv = g.cobraVisits[dm.CobraVisit.getID(cid, pid)]
-                    a = dm.TargetVisitToCobraVisitArc(tv, cv)
-                    a.visit = pid
+                    cv = g.cobraPointings[dm.CobraPointing.getID(cid, pid)]
+                    a = dm.TargetPointingToCobraPointingArc(tv, cv)
+                    a.pointing = pid
 
                     cx, cy = g.cobras[cid2].fplane_pos[0], g.cobras[cid2].fplane_pos[1]
                     tx, ty = g.sciTargets[tid].fplane_positions[pid][0], g.sciTargets[tid].fplane_positions[pid][1]
@@ -212,7 +212,7 @@ def buildSurveyPlan(cobras, targets, nreqv_dict, visibilities, class_dict,
                     e = g.add_arc(a)
 
             if tc.startswith("cal_") or tc.startswith("sky_"):
-                # For calibration targets we need to add edges between cobra visits and target (not targetVisit).
+                # For calibration targets we need to add edges between cobra pointings and target (not targetPointing).
                     for cid in cobra_ids:
                         cid2 = dm.Cobra.getID(cid)
                         tid = dm.CalTarget.getID(id, pid)
@@ -227,8 +227,8 @@ def buildSurveyPlan(cobras, targets, nreqv_dict, visibilities, class_dict,
                         if cid2 not in g.cobras:
                             continue
 
-                        cv = g.cobraVisits[dm.CobraVisit.getID(cid, pid)]
-                        a = dm.TargetVisitToCobraVisitArc(t, cv)
+                        cv = g.cobraPointings[dm.CobraPointing.getID(cid, pid)]
+                        a = dm.TargetPointingToCobraPointingArc(t, cv)
 
                         cx, cy = g.cobras[cid2].fplane_pos[0], g.cobras[cid2].fplane_pos[1]
                         tx, ty = g.calTargets[tid].fplane_positions[pid][0], g.calTargets[tid].fplane_positions[pid][1]
@@ -303,7 +303,7 @@ def compute_collision_flow_pairs(g, collision_pairs):
      calibrations targets differently
      What we do:
      Loop over all collision pairs (science - science, science - cal, cal - cal)
-      then for each visit
+      then for each pointing
       look if they are actually part of the graph (in case we are dealing with a 
       subregion of the focal plane only we might ignore them)
        identify the input flow arc (ther can be only one) for each of the two targets in the pair
@@ -315,26 +315,26 @@ def compute_collision_flow_pairs(g, collision_pairs):
     for pid in collision_pairs:
         for cp in collision_pairs[pid]:
 
-            for visit in g.visits:
+            for pointing in g.pointings:
                 tid1 = cp[0][0]
                 tid2 = cp[1][0]
 
-                tvid1 = "T_{}_v{}".format(cp[0][0],visit)
-                tvid2 = "T_{}_v{}".format(cp[1][0],visit)
+                tvid1 = "T_{}_v{}".format(cp[0][0],pointing)
+                tvid2 = "T_{}_v{}".format(cp[1][0],pointing)
 
-                # science targets have targetVisit nodes
-                # calibrations targets do not (there is a doublicate for each visits)
+                # science targets have targetPointing nodes
+                # calibrations targets do not (there is a doublicate for each pointings)
                 if tvid1 in g.calTargets:
                     f1id = g.calTargets[tvid1].inarcs[0].id
-                elif tvid1 in g.targetVisits:
-                    f1id = g.targetVisits[tvid1].inarcs[0].id
+                elif tvid1 in g.targetPointings:
+                    f1id = g.targetPointings[tvid1].inarcs[0].id
                 else:
                     continue # this target is not part of the problem, probably did not survive RMAX cut
 
                 if tvid2 in g.calTargets:
                     f2id = g.calTargets[tvid2].inarcs[0].id
-                elif tvid2 in g.targetVisits:
-                    f2id = g.targetVisits[tvid2].inarcs[0].id
+                elif tvid2 in g.targetPointings:
+                    f2id = g.targetPointings[tvid2].inarcs[0].id
                 else:
                     continue # this target is not part of the problem, probably did not survive RMAX cut
 
@@ -352,7 +352,7 @@ def computeStats(g):
     NSciComplete = 0
     NCalObs = np.nan
     NCalComplete = np.nan
-    NVISITS = len(g.visits)
+    NPOINTINGS = len(g.pointings)
 
     for t in g.sciTargets.values():
         NSciObs += sum([a.flow for a in t.inarcs])
@@ -368,7 +368,7 @@ def computeStats(g):
     for c in g.cobras.values():
         v = sum([a.flow for a in c.inarcs])
         Ncobras_used += int(v > 0)
-        Ncobras_fully_used += int(v == NVISITS)
+        Ncobras_fully_used += int(v == NPOINTINGS)
         
     stats['NSciObs'] = NSciObs
     #stats['NCalObs'] = NCalObs
@@ -406,7 +406,7 @@ def computeCompletion(g, class_dict, outfilename):
     print("Computing target completion ...")
 
 
-    filterArcs = lambda a : type(a) == dm.TargetToTargetVisitArc
+    filterArcs = lambda a : type(a) == dm.TargetToTargetPointingArc
 
     # consistency checks ....
     noutarcs = []
@@ -418,22 +418,22 @@ def computeCompletion(g, class_dict, outfilename):
     if not len( np.unique( noutarcs ) ) == 1:
         print("Error the number of outarcs from each science target not is not equal. Found ", np.unique( noutarcs ))
 
-    if not npointings == len(g.visits):
-        print("Error the number of outarcs from each science target not match len(g.visits). Found ", np.unique( noutarcs ))
+    if not npointings == len(g.pointings):
+        print("Error the number of outarcs from each science target not match len(g.pointings). Found ", np.unique( noutarcs ))
 
     # now compute per class and per pointing completion analysis
     tclass_completion  = OrderedDict()
     tclasses = np.unique( [t.target_class for t in g.sciTargets.values()] )
 
     # initilize structure to hold results
-    for i, pid in enumerate(g.visits): 
+    for i, pid in enumerate(g.pointings): 
         tclass_completion[pid] = OrderedDict()
         for tclass in np.unique(tclasses):
             tclass_completion[pid][tclass] = 0
 
     # count cumulative number of target in each class 
     # that got completed
-    for i, pid in enumerate(g.visits): 
+    for i, pid in enumerate(g.pointings): 
         print("   Pointing: ", pid)
 
         for t in g.sciTargets.values():
@@ -447,8 +447,8 @@ def computeCompletion(g, class_dict, outfilename):
     # now calculate number of observed calibration objects in each pointing
     caltclasses = np.unique( [t.target_class for t in g.calTargets.values()] )
     caltclass_obs  = OrderedDict()
-    for pid in g.visits:
-        ptargets = list( filter( lambda t : t.visit == pid,   g.calTargets.values() ) )
+    for pid in g.pointings:
+        ptargets = list( filter( lambda t : t.pointing == pid,   g.calTargets.values() ) )
         caltclass_obs[pid] = OrderedDict()
         for ctc in caltclasses:
             #lambda t : class_dict[t.id.split("_")[1] == ctc
@@ -461,7 +461,7 @@ def computeCompletion(g, class_dict, outfilename):
     dtype = ['i4', 'S8'] + ['i4'] * len(np.unique(tclasses)) + ['i4'] * len(np.unique(caltclasses))
     t = Table(names=names, dtype=dtype)
 
-    for i, pid in enumerate( g.visits ):
+    for i, pid in enumerate( g.pointings ):
         row = [i, pid]
 
         for tclass in np.unique(tclasses):

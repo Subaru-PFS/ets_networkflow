@@ -40,19 +40,19 @@ def buildLPProblem(g, name="MinCostFlowTest", cat='Integer'):
                 addFlow(flows, arc.id, 0, 1e6)
             else:
                 addFlow(flows, arc.id, 0, 1)  # capacity of one
-                # target to target visit arcs
+                # target to target pointing arcs
                 for arc2 in arc.endnode.outarcs:
                     if arc2.endnode.id == "SINK":
                         addFlow(flows, arc2.id, 0, 1e6)
                     else:
                         addFlow(flows, arc2.id, 0, 1)  # capacity of one
 
-    # add flow variables for target visit to cobra visit arcs
+    # add flow variables for target pointing to cobra pointing arcs
     for aid, a in g.arcs.items():
-        if type(a) == dm.TargetVisitToCobraVisitArc:
+        if type(a) == dm.TargetPointingToCobraPointingArc:
             addFlow(flows, a.id, 0, 1)
 
-    # add flow variables for cobra visit to cobra arcs
+    # add flow variables for cobra pointing to cobra arcs
     for cid, c in g.cobras.items():
         for arc in c.inarcs:
             addFlow(flows, arc.id, 0, 1)
@@ -70,13 +70,13 @@ def buildLPProblem(g, name="MinCostFlowTest", cat='Integer'):
         prob += pulp.lpSum( [ flows[a.id] for a in t.inarcs]) * t.gain == \
             pulp.lpSum([ flows[a.id] for a in t.outarcs])
 
-    # target visit nodes
-    for tv in g.targetVisits.values():
+    # target pointing nodes
+    for tv in g.targetPointings.values():
             prob += pulp.lpSum([flows[a.id] for a in tv.inarcs]) == \
                 sum([flows[a.id] for a in tv.outarcs])
 
-    # cobra visit nodes
-    for cvid, cv in g.cobraVisits.items():
+    # cobra pointing nodes
+    for cvid, cv in g.cobraPointings.items():
         prob += pulp.lpSum([flows[a.id] for a in cv.inarcs]) == \
             pulp.lpSum([flows[a.id] for a in cv.outarcs])
 
@@ -117,8 +117,8 @@ def buildLPProblem(g, name="MinCostFlowTest", cat='Integer'):
     cost = pulp.LpVariable("cost", 0)
 
     prob += cost == pulp.lpSum([a.cost * flows[a.id] for a in g.overflowArcs.values()])\
-        + pulp.lpSum([a.cost * flows[a.id] for a in g.targetToTargetVisitArcs.values()]) \
-        + pulp.lpSum([a.cost * flows[a.id] for a in g.targetVisitToCobraVisitArcs.values()])
+        + pulp.lpSum([a.cost * flows[a.id] for a in g.targetToTargetPointingArcs.values()]) \
+        + pulp.lpSum([a.cost * flows[a.id] for a in g.targetPointingToCobraPointingArcs.values()])
 
     # This sets the cost as objective function for the optimisation.
     prob += cost
@@ -150,19 +150,19 @@ def buildLPProblemGRB(g, name="MinCostFlowTest"):
                 addFlow(m, flows, arc.id, 0, 1e6)
             else:
                 addFlow(m, flows, arc.id, vtype=GRB.BINARY)  # capacity of one
-                # target to target visit arcs
+                # target to target pointing arcs
                 for arc2 in arc.endnode.outarcs:
                     if arc2.endnode.id == "SINK":
                         addFlow(m, flows, arc2.id, 0, 1e6)
                     else:
                         addFlow(m, flows, arc2.id, vtype=GRB.BINARY)  # capacity of one
                         
-    # add flow variables for target visit to cobra visit arcs
+    # add flow variables for target pointing to cobra pointing arcs
     for aid, a in g.arcs.items():
-        if type(a) == dm.TargetVisitToCobraVisitArc:
+        if type(a) == dm.TargetPointingToCobraPointingArc:
             addFlow(m, flows, a.id, vtype=GRB.BINARY)
 
-    # add flow variables for cobra visit to cobra arcs
+    # add flow variables for cobra pointing to cobra arcs
     for cid, c in g.cobras.items():
         for arc in c.inarcs:
             addFlow(m, flows, arc.id, vtype=GRB.BINARY)
@@ -182,15 +182,15 @@ def buildLPProblemGRB(g, name="MinCostFlowTest"):
                      quicksum( [ flows[a.id] for a in t.outarcs])\
                    )
 
-    # target visit nodes
-    for tv in g.targetVisits.values():
+    # target pointing nodes
+    for tv in g.targetPointings.values():
             m.addConstr( quicksum([flows[a.id] for a in tv.inarcs]) == \
                          quicksum([flows[a.id] for a in tv.outarcs])\
                        )
 
             
-    # cobra visit nodes
-    for cvid, cv in g.cobraVisits.items():
+    # cobra pointing nodes
+    for cvid, cv in g.cobraPointings.items():
         m.addConstr( quicksum([flows[a.id] for a in cv.inarcs]) == \
                      quicksum([flows[a.id] for a in cv.outarcs])\
                    )
@@ -233,8 +233,8 @@ def buildLPProblemGRB(g, name="MinCostFlowTest"):
     cost = m.addVar(vtype=GRB.CONTINUOUS, name="cost")
 
     m.addConstr( cost == quicksum([a.cost * flows[a.id] for a in g.overflowArcs.values()])\
-        + quicksum([a.cost * flows[a.id] for a in g.targetToTargetVisitArcs.values()]) \
-        + quicksum([a.cost * flows[a.id] for a in g.targetVisitToCobraVisitArcs.values()])
+        + quicksum([a.cost * flows[a.id] for a in g.targetToTargetPointingArcs.values()]) \
+        + quicksum([a.cost * flows[a.id] for a in g.targetPointingToCobraPointingArcs.values()])
                )
     
     # This sets the cost as objective function for the optimisation.
