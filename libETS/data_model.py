@@ -18,7 +18,7 @@ def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None):
     Tv_i = defaultdict(list)  # Target visit inflows
     T_o = defaultdict(list)  # Target outflows (only science targets)
     T_i = defaultdict(list)  # Target inflows (only science targets)
-    CTCv_o = defaultdict(list)  # Calibration Target visit outflows
+    CTCv_o = defaultdict(list)  # Calibration Target class visit outflows
     STC_o = defaultdict(list)  # Science Target outflows
     prob = pulp.LpProblem("problem", pulp.LpMinimize)
     cost = pulp.LpVariable("cost", 0)
@@ -43,6 +43,15 @@ def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None):
     newvar._varcount = 0
 
     # define LP variables
+
+    # create nodes for every visit and calibration target class
+    for key, value in classdict.items():
+        if value["calib"]:
+            for ivis in range(nvisits):
+                f = newvar(0,100000000)
+                CTCv_o[(key, ivis)].append(f)
+                cost += f*value["nonObservationCost"]
+
     for ivis in range(nvisits):
         for tidx, val in vis[ivis].items():
             tgt = targets[tidx]
@@ -109,7 +118,7 @@ def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None):
     for key, val in STC_o.items():
         prob += pulp.lpSum([v for v in val]) == len(val)-1
 
-    status = prob.solve(pulp.COIN_CMD(msg=1, keepFiles=0, maxSeconds=1000,
+    status = prob.solve(pulp.COIN_CMD(msg=1, keepFiles=0, maxSeconds=100,
                                       threads=1, dual=10.))
 
     res = [{} for _ in range(nvisits)]
