@@ -114,7 +114,7 @@ raTel, decTel = dm.telescopeRaDecFromFile(fscience_targets)
 posang = 0.
 otime = "2016-04-03T08:00:00Z"
 telescopes=[]
-nvisit = 18
+nvisit = 9
 for _ in range(nvisit):
     telescopes.append(dm.Telescope(cobras, 1., raTel+np.random.normal()*1e-2, decTel+np.random.normal()*1e-2, posang, otime))
     print (telescopes[-1]._ra, telescopes[-1]._dec)
@@ -132,9 +132,9 @@ classdict["sci_P7"] = {"nonObservationCost": 40, "partialObservationCost": 1e9, 
 classdict["sky"] = {"numRequired": 2, "nonObservationCost": 1000, "calib": True}
 classdict["cal"] = {"numRequired": 1, "nonObservationCost": 1000, "calib": True}
 
-vis_cost = [0.1*i for i in range(nvisit)]
+vis_cost = [0.1 + 0.1*i for i in range(nvisit)]
 
-res = dm.observeWithNetflow(telescopes[0].Cobras, tgt, tpos, classdict, 300., vis_cost)
+res = dm.observeWithNetflow(telescopes[0].Cobras, tgt, tpos, classdict, 300., vis_cost, gurobi=True)
 print (len(res))
 for vis, tp in zip(res,tpos):
     plot_assignment(cobras, tgt, tp, vis)

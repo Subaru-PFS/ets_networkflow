@@ -22,7 +22,7 @@ def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None, guro
     if gurobi:
         import gurobipy as gbp
         prob = gbp.Model("problem")
-        cost = prob.addVar(vtype=GRB.CONTINUOUS, name="cost")
+        cost = prob.addVar(vtype=gbp.GRB.CONTINUOUS, name="cost")
         lpSum = gbp.quicksum
         def add_constraint(problem, constraint):
             problem.addConstr(constraint)
@@ -54,6 +54,10 @@ def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None, guro
     def newvar(lo, hi):
         newvar._varcount += 1
         if gurobi:
+            if lo is None:
+                lo = -gbp.GRB.INFINITY
+            if hi is None:
+                hi = gbp.GRB.INFINITY
             if lo == 0 and hi == 1:
                return prob.addVar(vtype=gbp.GRB.BINARY, name="v{}".format(newvar._varcount))
             else:
@@ -109,9 +113,10 @@ def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None, guro
                 Tv_o[(tidx, ivis)].append((f, cidx))
                 cost += f*vis_cost[ivis]
 
-    # Cost function
-    prob += cost
-
+    if gurobi:
+        prob.setObjective(cost)
+    else:
+        prob+=cost
     # Constraints
 
     # every Cobra can observe at most one target per visit
@@ -141,7 +146,7 @@ def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None, guro
 
     if gurobi:
         prob.ModelSense = 1  # minimize
-        model.optimize()
+        prob.optimize()
     else:
         status = prob.solve(pulp.COIN_CMD(msg=1, keepFiles=0, maxSeconds=100,
                                           threads=1, dual=10.))
@@ -156,8 +161,8 @@ def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None, guro
                 res[ivis][tidx] = cidx
     return res
 
-def observeWithNetflow(cbr, tgt, tpos, classdict, tvisit, vis_cost=None):
-    return _build_network(cbr, tgt, tpos, classdict, tvisit, vis_cost)
+def observeWithNetflow(cbr, tgt, tpos, classdict, tvisit, vis_cost=None, gurobi=False):
+    return _build_network(cbr, tgt, tpos, classdict, tvisit, vis_cost, gurobi)
 
 
 class Cobra(object):
