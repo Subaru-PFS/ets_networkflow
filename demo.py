@@ -134,7 +134,10 @@ classdict["cal"] = {"numRequired": 1, "nonObservationCost": 1000, "calib": True}
 
 vis_cost = [0.1 + 0.1*i for i in range(nvisit)]
 
-res = dm.observeWithNetflow(telescopes[0].Cobras, tgt, tpos, classdict, 300., vis_cost, gurobi=True)
+def cobraMoveCost(dist):
+    return 5.*dist
+
+res = dm.observeWithNetflow(telescopes[0].Cobras, tgt, tpos, classdict, 300., vis_cost, cobraMoveCost=cobraMoveCost, gurobi=True)
 print (len(res))
 for vis, tp in zip(res,tpos):
     plot_assignment(cobras, tgt, tp, vis)

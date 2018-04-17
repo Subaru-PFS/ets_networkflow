@@ -11,7 +11,7 @@ def _get_visibility(cobras, tpos):
     return pyETS.getVis(tpos, cbr)
 
 
-def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None, gurobi=False):
+def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None, cobraMoveCost=None, gurobi=False):
     Cv_i = defaultdict(list)  # Cobra visit inflows
     Tv_o = defaultdict(list)  # Target visit outflows
     Tv_i = defaultdict(list)  # Target visit inflows
@@ -73,7 +73,7 @@ def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None, guro
     for key, value in classdict.items():
         if value["calib"]:
             for ivis in range(nvisits):
-                f = newvar(0,100000000)
+                f = newvar(0,None)
                 CTCv_o[(key, ivis)].append(f)
                 cost += f*value["nonObservationCost"]
 
@@ -112,6 +112,10 @@ def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None, guro
                 Cv_i[(cidx, ivis)].append(f)
                 Tv_o[(tidx, ivis)].append((f, cidx))
                 cost += f*vis_cost[ivis]
+                if cobraMoveCost is not None:
+                    dist = np.abs(cobras[cidx].center-tpos[ivis][tidx])
+                    print dist
+                    cost += f*cobraMoveCost(dist)
 
     if gurobi:
         prob.setObjective(cost)
@@ -161,8 +165,8 @@ def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None, guro
                 res[ivis][tidx] = cidx
     return res
 
-def observeWithNetflow(cbr, tgt, tpos, classdict, tvisit, vis_cost=None, gurobi=False):
-    return _build_network(cbr, tgt, tpos, classdict, tvisit, vis_cost, gurobi)
+def observeWithNetflow(cbr, tgt, tpos, classdict, tvisit, vis_cost=None, cobraMoveCost=None, gurobi=False):
+    return _build_network(cbr, tgt, tpos, classdict, tvisit, vis_cost, cobraMoveCost, gurobi)
 
 
 class Cobra(object):
