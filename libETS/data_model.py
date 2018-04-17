@@ -22,6 +22,7 @@ def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None, guro
     if gurobi:
         import gurobipy as gbp
         prob = gbp.Model("problem")
+        cost = prob.addVar(vtype=GRB.CONTINUOUS, name="cost")
         lpSum = gbp.quicksum
         def add_constraint(problem, constraint):
             problem.addConstr(constraint)
