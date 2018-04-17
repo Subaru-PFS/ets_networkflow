@@ -114,7 +114,6 @@ def _build_network(cobras, targets, tpos, classdict, tvisit, vis_cost=None, cobr
                 cost += f*vis_cost[ivis]
                 if cobraMoveCost is not None:
                     dist = np.abs(cobras[cidx].center-tpos[ivis][tidx])
-                    print dist
                     cost += f*cobraMoveCost(dist)
 
     if gurobi:
