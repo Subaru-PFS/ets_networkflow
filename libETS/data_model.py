@@ -1,7 +1,7 @@
 import numpy as np
 import pycconv
 import pyETS
-from collections import OrderedDict, defaultdict
+from collections import defaultdict
 
 
 def _get_visibility(cobras, tpos):
