@@ -46,10 +46,22 @@ class Cobra(Node):
         super(Cobra, self).__init__(self.getID(cid))
         self.fplane_pos = fplane_pos
         
-    def getX(self, pid):
+    def getX(self, pid=None):
+        """
+        pid is only a fake parameter here to give the
+        cobra's getX() the same signature as the target's 
+        getX(). Other that for the targets, the cobras
+        x,y don't cahnge from pointing to pointings.
+        """
         return self.fplane_pos[0]
         
-    def getY(self, pid):
+    def getY(self, pid=None):
+        """
+        pid is only a fake parameter here to give the
+        cobra's getY() the same signature as the target's 
+        getY(). Other that for the targets, the cobras
+        x,y don't cahnge from pointing to pointings.
+        """
         return self.fplane_pos[1]
 
 

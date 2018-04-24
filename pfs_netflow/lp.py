@@ -6,6 +6,12 @@ from collections import OrderedDict
 import numpy as np
 import time
 from . import datamodel as dm
+from pfs_netflow.utils import pp 
+from gurobipy import quicksum
+from pfs_netflow.survey_plan import compute_collision_pairs, compute_collision_flow_pairs
+
+from pfs_netflow import ics_interface
+from pfs_netflow import survey_plan
 
 
 def solve(prob, maxSeconds=5, solver='COIN_CMD'):
@@ -133,6 +139,22 @@ def buildLPProblemGRB(g, name="MinCostFlowTest"):
     """
     from gurobipy import Model, quicksum, GRB
     
+    NCobras = len(g.cobras)
+    NSciTargets = len(g.sciTargets)
+    NCalTargets = len(g.calTargets)
+    NPOINTINGS = len( g.pointings )
+
+    summary = ""
+    summary += pp("Building LP problem ...")
+    summary += pp("NPOINTINGS = {}".format(NPOINTINGS))
+    summary += pp("Searching optimal strategy to observe in ")
+    summary += pp(" {} pointings".format(NPOINTINGS))
+    summary += pp(" {} science targets".format(NSciTargets))
+    summary += pp(" {} calib. targets".format(int(NCalTargets/NPOINTINGS) ))
+    summary += pp(" {} cobras".format(NCobras))
+    summary += pp("num nodes: {}".format(len(g.nodes)))
+    summary += pp("num edges: {}".format(len(g.arcs)))
+    
     start_time = time.time()
 
     m = Model(name)
@@ -240,19 +262,60 @@ def buildLPProblemGRB(g, name="MinCostFlowTest"):
     # This sets the cost as objective function for the optimisation.
     m.setObjective(cost, GRB.MINIMIZE)
     time_to_finish = time.time() - start_time
-    print(" Time to completion: {:.2f} s".format(time_to_finish))
+    time_to_build = time.time() - start_time
+    summary += pp("Time to build model: {:.4e} s".format(time_to_build))
+
+
+    # bBldly add flows and costs to the survey plan graph.
+    # reaally should be part of the LP problem, but gurobipy's Model
+    # is immutable.
+    g.flows = flows
+    g.cost = cost
     
-    return m, flows, cost
+    return m
 
 
-
-def setflows(m, g, flows):
+def add_fiber_fiber_collision_avoidance(g, model, pointings, target_fplane_pos):
     """
-    Take the solution of the LP model and sets all the flows in the survey plan 
-    graph according to that solution.
+    Adds flow constrint equations to avoid fiber to fiber endpoint collision "a-priori",
+    i.e. solutions which cause collisions won't be considered in the first place.
     """
-    flows_sol = m.getAttr('X', flows)
-    for a in g.arcs.values():
-        k = '{}={}'.format(a.startnode.id, a.endnode.id)
-        if k in flows_sol:
-            a.flow = flows_sol[k]
+    collision_pairs = compute_collision_pairs(pointings, target_fplane_pos) 
+
+    flow_pairs = compute_collision_flow_pairs(g, collision_pairs)
+    print("Adding {} collision avoidance constraints.".format(len(flow_pairs)))              
+    for fp in flow_pairs:
+        if fp[0] in g.flows and fp[1] in g.flows:
+            model.addConstr( quicksum( [ g.flows[ fp[0] ], g.flows[ fp[1] ] ] ) <= 1. )
+            
+
+def add_fiber_elbow_collision_avoidance(g, model, ivisibilities, fiber_collision_radius = 1.0):
+    """
+    Adds flow constrint equations to avoid fiber to fiber AND fiber to elbow endpoint collision "a-priori",
+    i.e. solutions which cause collisions won't be considered in the first place.
+    1.074 is good radius to also avoid grazing collisions at link.
+    """
+    elbowPositions = ics_interface.getElbowPositions(g, ivisibilities)
+
+    collision_flow_pairs = \
+    ics_interface.compute_collision_flow_pairs(g, elbowPositions, fiber_collision_radius = fiber_collision_radius) 
+    ics_interface.addCollisionFlowConstraints(model, g.flows, collision_flow_pairs)
+
+
+def optimize(model, g, SOLVE_TIME_LIMIT, NUMER_OF_THREDS, MIP_GAP):
+    # Solve problem!
+    summary = ""
+    summary += pp("Solving LP problem ...")
+    start_time = time.time()
+
+    model.Params.timelimit = SOLVE_TIME_LIMIT  # time limit in seconds
+    model.Params.Threads = NUMER_OF_THREDS     # number of thread to use
+    model.Params.MIPGap = MIP_GAP              # solution tolerance 
+
+    model.optimize()
+
+    time_to_solve = time.time() - start_time
+    summary += pp("Solve status is [{}].".format( model.status ))
+    summary += pp("Time to solve: {:.4e} s".format(time_to_solve))
+
+    survey_plan.setflows(model, g)

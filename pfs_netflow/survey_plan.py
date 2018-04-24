@@ -13,9 +13,10 @@ import time
 
 from . import datamodel as dm
 
+from pfs_netflow.utils import pp
 
 def buildSurveyPlan(cobras, targets, nreqv_dict, visibilities, class_dict,
-                    cost_dict, supply_dict, RMAX, CENTER=(0.,0.), COBRAS=[]):
+                    cost_dict, supply_dict, RMAX, CENTER=(0.,0.), COBRAS=[], PRINTSTATS=True):
     """
     Builds a graph which represents a survey plan.
     
@@ -238,6 +239,38 @@ def buildSurveyPlan(cobras, targets, nreqv_dict, visibilities, class_dict,
                         a.d = d
 
                         g.add_arc(a)
+                        
+        for pid in g.pointings:
+            print("Pointing {}".format(pid))
+            for c in g.sciTargetClasses:
+                nsci = 0
+                nsci_reachable = 0
+                for t in g.sciTargetClasses[c].targets.values():
+                    if t.outarcs != []:
+                        nsci += 1
+                        nsci_reachable += 1
+                print("   Number of targets in {} is {}.".format(c, nsci ) )
+                print("   Number of observable targets in {} is {}.".format(c, nsci_reachable ) )
+
+            ncal = 0
+            ncal_reachable = 0
+            for t in g.calTargetClasses['TClass_cal_P01_v{}'.format(pid)].targets.values():
+                if t.outarcs != []:
+                    ncal += 1
+                    ncal_reachable += 1
+            print("   Number of calibration stars: {}".format(ncal) )
+            print("   Number of observable calibration stars: {}".format( ncal_reachable ) )
+
+            nsky = 0
+            nsky_reachable = 0
+            for t in g.calTargetClasses['TClass_sky_P01_v{}'.format(pid)].targets.values():
+                if t. outarcs != []:
+                    nsky += 1
+                    nsky_reachable += 1
+            print("   Number of sky positions: {}".format(nsky) )
+            print("   Number of observable sky positions: {}".format(nsky_reachable) )
+                  
+    print("Done.")
 
     return g
 
@@ -295,6 +328,44 @@ def compute_collision_pairs(pointings, target_fplane_pos):
     return collision_pairs
     
 
+def compute_cobra_neighbors(g, R = 15.):
+    """
+    Computes for each cobra a list of neighboring cobras that shoudl be
+    considered we resolving after a collision detection.
+    Not that the meaning of R is quite subtle but important.
+    If the flows through non-colliding cobras get fixed in the itereative collision avoidance,
+    then only the flows through cobrad within R around colliding cobras remain open such
+    that those cobras can get reassigned. Small R gives the solver less freedom to find an
+    alternate optimal solution after a collision detection. Too large R result long interations
+    as the corresponding LP problems are similar im complexity to the original one.
+    """
+    # Compute for each cobra its neighbors
+    R = 15.
+    cxx = np.array( [c.getX() for c in g.cobras.values()] )
+    cyy = np.array( [c.getY() for c in g.cobras.values()] )
+    cc  = np.array( [c for c in g.cobras.values()] )
+
+    for c in g.cobras.values():
+        dd_sq = (c.getX() - cxx)**2 + (c.getY() - cyy)**2
+        ii = dd_sq <= R**2.
+        c.neighbor_cobras = cc[ii]
+
+    mdn = np.median( [ len(c.neighbor_cobras) for c in g.cobras.values()] )
+    print("Median number of neighbors is {}.".format(mdn))
+    
+
+def setflows(m, g):
+    """
+    Take the solution of the LP model and sets all the flows in the survey plan 
+    graph according to that solution.
+    """
+    flows_sol = m.getAttr('X', g.flows)
+    for a in g.arcs.values():
+        k = '{}={}'.format(a.startnode.id, a.endnode.id)
+        if k in flows_sol:
+            a.flow = flows_sol[k]
+            
+            
 def compute_collision_flow_pairs(g, collision_pairs):
     """
      Identifiy which flow variables correspond to which collision pairs.
@@ -476,3 +547,23 @@ def computeCompletion(g, class_dict, outfilename):
     print("Done, write {}.".format(outfilename) )
     
     return t
+
+
+def report_optimize_stats(model, g):
+    stats = computeStats(g)
+    obj = model.getObjective()
+    summary = ""
+    summary += pp("{} = {}".format('Value of cost function', obj.getValue() ) )
+    summary += pp("[{}] out of {} science targets get observed.".format(int(stats['NSciObs']) ,len(g.sciTargets)) )
+    summary += pp("For {} out of these all required exposures got allocated.".format(stats['NSciComplete']))  
+    summary += pp("Per target class completion:")
+
+    summary += pp("   {:15s} {:10s} {:10s} {:10s}".format('class', 'total', 'observed', 'completed') )
+    for tc,compl in stats['completion'].items():
+        summary += pp("   {:15s} {:10d} {:10d} {:10d}".format(tc, compl['total'],compl['observed'],compl['completed']))                                                                       
+        #print(tc, compl)                                                                  
+    summary += pp("{} targets get sent down the overflow arc.".format(stats['Noverflow']))
+    summary += pp("{} out of {} cobras observed a target in one or more exposures.".format(stats['Ncobras_used'], len(g.cobras) ))
+    summary += pp("{} cobras observed a target in all exposures.".format(stats['Ncobras_fully_used']))
+
+
