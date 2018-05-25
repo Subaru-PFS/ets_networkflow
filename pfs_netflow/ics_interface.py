@@ -8,12 +8,12 @@ from scipy.spatial.distance import cdist
 
 from gurobipy import quicksum
 
-from ics.cobraOps.Bench import Bench
-from ics.cobraOps.CobrasCalibrationProduct import CobrasCalibrationProduct
-from ics.cobraOps.CollisionSimulator import CollisionSimulator
-from ics.cobraOps.DistanceTargetSelector import DistanceTargetSelector
-from ics.cobraOps.RandomTargetSelector import RandomTargetSelector
-from ics.cobraOps.TargetGroup import TargetGroup
+from cobraOps.Bench import Bench
+from cobraOps.CobrasCalibrationProduct import CobrasCalibrationProduct
+from cobraOps.CollisionSimulator import CollisionSimulator
+from cobraOps.DistanceTargetSelector import DistanceTargetSelector
+from cobraOps.RandomTargetSelector import RandomTargetSelector
+from cobraOps.TargetGroup import TargetGroup
 
 
 def getElbowPositions(g, ivisibilities):
